@@ -1,6 +1,5 @@
 package core.domain.chat.entity;
 
-import core.domain.user.entity.User;
 import core.global.enums.ChatParticipantStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -11,6 +10,7 @@ import java.time.Instant;
 @Entity
 @Table(name = "chat_participant",
         uniqueConstraints = {
+                // user_id로 변경
                 @UniqueConstraint(columnNames = {"chatroom_id", "user_id"})
         }
 )
@@ -25,15 +25,14 @@ public class ChatParticipant {
     @JoinColumn(name = "chatroom_id", nullable = false)
     private ChatRoom chatRoom;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Column(name = "joined_at", updatable = false)
     private Instant joinedAt;
 
-    @Column(name = "last_read_message_id")
-    private Long lastReadMessageId;
+    @Column(name = "last_read_at")
+    private Instant lastReadAt;
 
     @Enumerated(EnumType.STRING)
     private ChatParticipantStatus status;
@@ -44,20 +43,21 @@ public class ChatParticipant {
     @Column(name = "translate_enabled", nullable = false)
     private boolean translateEnabled = false;
 
+    public ChatParticipant(ChatRoom chatRoom, Long userId) {
+        this.chatRoom = chatRoom;
+        this.userId = userId;
+        this.status = ChatParticipantStatus.ACTIVE;
+        this.joinedAt = Instant.now();
+        this.lastReadAt = Instant.now(); // 처음엔 현재 시간으로 초기화
+    }
+
+    public void updateLastReadAt() {
+        this.lastReadAt = Instant.now();
+    }
+
     public void toggleTranslation(boolean enabled) {
         this.translateEnabled = enabled;
     }
-
-    public ChatParticipant(ChatRoom chatRoom, User user) {
-        this.chatRoom = chatRoom;
-        this.user = user;
-        this.status = ChatParticipantStatus.ACTIVE;
-        this.joinedAt = Instant.now();
-    }
-    public void delete() {
-        this.status = ChatParticipantStatus.LEFT;
-    }
-
 
     public void leave() {
         this.status = ChatParticipantStatus.LEFT;
@@ -68,8 +68,4 @@ public class ChatParticipant {
         this.status = ChatParticipantStatus.ACTIVE;
         this.lastLeftAt = null;
     }
-    public void setLastReadMessageId(Long messageId) {
-        this.lastReadMessageId = messageId;
-    }
 }
-

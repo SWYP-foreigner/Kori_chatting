@@ -15,14 +15,6 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
     @Query("SELECT cr FROM ChatRoom cr WHERE cr.group = true AND LOWER(cr.roomName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<ChatRoom> findGroupChatRoomsByKeyword(@Param("keyword") String keyword);
-    /**
-     * 특정 사용자가 속한 모든 채팅방 목록을 찾습니다.
-     */
-    @Query("SELECT cr FROM ChatRoom cr " +
-           "JOIN cr.participants p " +
-           "WHERE p.user.id = :userId")
-    List<ChatRoom> findChatRoomsByUserId(@Param("userId") Long userId);
-
     @Query("""
             select distinct cr
             from ChatRoom cr
@@ -40,8 +32,6 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
             """)
     Optional<ChatRoom> findByParticipantIds(Long currentUserId, Long otherUserId);
 
-    @Query("SELECT cr FROM ChatRoom cr JOIN FETCH cr.participants p JOIN FETCH p.user WHERE cr.id = :roomId")
-    Optional<ChatRoom> findByIdWithParticipants(@Param("roomId") Long roomId);
 
     List<ChatRoom> findTop10ByGroupTrueOrderByCreatedAtDesc();
 
@@ -51,16 +41,30 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     List<ChatRoom> findTopByGroupTrueOrderByParticipantCountDesc(int limit);
 
     List<ChatRoom> findTop10ByGroupTrueAndIdLessThanOrderByCreatedAtDesc(Long id);
-    /**
-     * 특정 사용자가 ACTIVE 상태로 참여하고 있는 채팅방 목록을 조회합니다.
-     *
-     * @param userId         사용자 ID
-     * @param participantStatus 조회할 참여 상태 (ACTIVE)
-     * @return ACTIVE 상태인 채팅방 목록
-     */
-    @Query("SELECT cr FROM ChatRoom cr JOIN ChatParticipant cp ON cr.id = cp.chatRoom.id WHERE cp.user.id = :userId AND cp.status = :participantStatus")
-    List<ChatRoom> findActiveChatRoomsByUserId(@Param("userId") Long userId, @Param("participantStatus") ChatParticipantStatus participantStatus);
     @Query("SELECT cr FROM ChatRoom cr JOIN FETCH cr.participants p JOIN FETCH p.user WHERE cr.id = :roomId")
     Optional<ChatRoom> findByIdWithParticipantsAndUsers(@Param("roomId") Long roomId);
+
+
+
+    @Query("SELECT cr FROM ChatRoom cr WHERE cr.group = false " +
+            "AND (SELECT COUNT(p) FROM ChatParticipant p WHERE p.chatRoom = cr AND p.userId IN (:userId1, :userId2)) = 2 " +
+            "AND (SELECT COUNT(p) FROM ChatParticipant p WHERE p.chatRoom = cr) = 2")
+    Optional<ChatRoom> findOneToOneRoomByParticipantIds(@Param("userId1") Long userId1, @Param("userId2") Long userId2);
+
+    /**
+     * 특정 사용자가 'ACTIVE' 상태로 참여하고 있는 모든 채팅방 목록을 조회합니다.
+     * N+1 문제를 방지하기 위해 참가자(participants) 정보까지 한 번의 쿼리로 함께 가져옵니다.
+     *
+     * @param userId 조회할 사용자의 ID
+     * @param status 조회할 참가자의 상태 (예: ChatParticipantStatus.ACTIVE)
+     * @return ChatRoom 리스트
+     */
+    @Query("SELECT DISTINCT cr FROM ChatRoom cr " +
+            "JOIN FETCH cr.participants p " +
+            "WHERE p.userId = :userId AND p.status = :status")
+    List<ChatRoom> findActiveChatRoomsWithParticipantsByUserId(
+            @Param("userId") Long userId,
+            @Param("status") ChatParticipantStatus status
+    );
 
 }

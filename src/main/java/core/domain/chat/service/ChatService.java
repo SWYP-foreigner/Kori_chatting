@@ -1,6 +1,7 @@
 package core.domain.chat.service;
 
 
+import core.domain.chat.client.UserClient;
 import core.domain.chat.dto.*;
 import core.domain.chat.entity.ChatMessage;
 import core.domain.chat.entity.ChatParticipant;
@@ -9,7 +10,6 @@ import core.domain.chat.repository.ChatMessageRepository;
 import core.domain.chat.repository.ChatParticipantRepository;
 import core.domain.chat.repository.ChatRoomRepository;
 import core.domain.user.entity.User;
-import core.domain.user.repository.UserRepository;
 import core.global.enums.ChatParticipantStatus;
 import core.global.enums.ErrorCode;
 import core.global.enums.ImageType;
@@ -17,8 +17,10 @@ import core.global.exception.BusinessException;
 import core.global.image.entity.Image;
 import core.global.image.repository.ImageRepository;
 import core.global.image.service.ImageService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -31,12 +33,12 @@ import java.util.stream.IntStream;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class ChatService {
 
     private final ChatRoomRepository chatRoomRepo;
     private final ChatParticipantRepository participantRepo;
     private final ChatMessageRepository chatMessageRepository;
-    private final UserRepository userRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private static final int MESSAGE_PAGE_SIZE = 20;
     private final TranslationService translationService;
@@ -44,111 +46,144 @@ public class ChatService {
     private final ChatRoomRepository chatRoomRepository;
     private final SimpMessagingTemplate messagingTemplate; // 주입 필요
     private final ImageService imageService;
+    private final UserClient userClient;
 
-    public ChatService(ChatRoomRepository chatRoomRepo,
-                       ChatParticipantRepository participantRepo, ChatMessageRepository chatMessageRepository,
-                       UserRepository userRepository, ChatParticipantRepository chatParticipantRepository,
-                       TranslationService translationService, ImageRepository imageRepository, ChatRoomRepository chatRoomRepository, SimpMessagingTemplate messagingTemplate, ImageService imageService) {
-        this.chatRoomRepo = chatRoomRepo;
-        this.participantRepo = participantRepo;
-
-        this.chatMessageRepository = chatMessageRepository;
-        this.userRepository = userRepository;
-        this.chatParticipantRepository = chatParticipantRepository;
-        this.translationService = translationService;
-        this.imageRepository = imageRepository;
-        this.chatRoomRepository = chatRoomRepository;
-        this.messagingTemplate = messagingTemplate;
-        this.imageService = imageService;
-    }
-    private record ChatRoomWithTime(ChatRoom room, Instant lastMessageTime) {}
 
     public List<ChatRoomSummaryResponse> getMyAllChatRoomSummaries(Long userId) {
-        User currentUser = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        List<ChatRoom> rooms = chatRoomRepo.findActiveChatRoomsWithParticipantsByUserId(userId, ChatParticipantStatus.ACTIVE);
+        if (rooms.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Long> roomIds = rooms.stream().map(ChatRoom::getId).toList();
 
-        List<ChatRoom> rooms = chatRoomRepo.findActiveChatRoomsByUserId(userId, ChatParticipantStatus.ACTIVE);
+        Map<Long, ChatMessage> lastMessagesMap = findLatestMessageForRooms(roomIds);
+        Map<Long, Instant> lastReadAtMap = rooms.stream()
+                .flatMap(room -> room.getParticipants().stream())
+                .filter(p -> p.getUserId().equals(userId) && p.getLastReadAt() != null)
+                .collect(Collectors.toMap(p -> p.getChatRoom().getId(), ChatParticipant::getLastReadAt, (t1, t2) -> t1));
+        Map<Long, Long> unreadCountsMap = countUnreadMessagesGroupedByRoomId(lastReadAtMap);
 
-        return rooms.stream()
-                .map(room -> new ChatRoomWithTime(room, getLastMessageTime(room.getId())))
-                .sorted(Comparator.comparing(
-                        ChatRoomWithTime::lastMessageTime,
-                        Comparator.nullsLast(Comparator.reverseOrder())
-                ))
-                .map(roomWithTime -> {
-                    ChatRoom room = roomWithTime.room();
-                    Instant lastMessageTime = roomWithTime.lastMessageTime();
+        Set<Long> opponentUserIds = rooms.stream()
+                .filter(room -> !room.getGroup())
+                .flatMap(room -> room.getParticipants().stream())
+                .map(ChatParticipant::getUserId)
+                .filter(id -> !id.equals(userId))
+                .collect(Collectors.toSet());
+        Map<Long, UserResponseDto> userInfoMap;
 
-                    String lastMessageContent = getLastMessageContent(room.getId());
-                    int unreadCount = countUnreadMessages(room.getId(), userId);
+        if (!opponentUserIds.isEmpty()) {
+            userInfoMap = userClient.getUsersInfo(new ArrayList<>(opponentUserIds)).stream()
+                    .collect(Collectors.toMap(UserResponseDto::userId, dto -> dto));
+        } else {
+            userInfoMap = new HashMap<>();
+        }
+
+        List<Long> groupRoomIds = rooms.stream()
+                .filter(ChatRoom::getGroup)
+                .map(ChatRoom::getId)
+                .toList();
+
+        Map<Long, String> groupChatImagesMap;
+        if (!groupRoomIds.isEmpty()) {
+            groupChatImagesMap = userClient.getImagesForChatRooms(groupRoomIds).stream()
+                    .collect(Collectors.toMap(ImageDto::relatedId, ImageDto::imageUrl));
+        } else {
+            groupChatImagesMap = new HashMap<>();
+        }
+
+
+        List<ChatRoomSummaryResponse> summaries = rooms.stream().map(room -> {
+                    Long roomId = room.getId();
+                    ChatMessage lastMessage = lastMessagesMap.get(roomId);
+                    String lastMessageContent = (lastMessage != null) ? lastMessage.getContent() : "아직 메시지가 없습니다.";
+                    Instant lastMessageTime = (lastMessage != null) ? lastMessage.getSentAt() : room.getCreatedAt();
+                    int unreadCount = unreadCountsMap.getOrDefault(roomId, 0L).intValue();
                     int participantCount = room.getParticipants().size();
                     String roomName;
-                    String roomImageUrl;
+                    String roomImageUrl = null;
 
                     if (!room.getGroup()) {
-                        Optional<User> opponentOpt = room.getParticipants().stream()
-                                .map(ChatParticipant::getUser)
-                                .filter(u -> !u.getId().equals(userId))
-                                .findFirst();
-
-                        if (opponentOpt.isPresent()) {
-                            User opponent = opponentOpt.get();
-                            roomName = opponent.getFirstName()+" "+opponent.getLastName();
-                            roomImageUrl = imageRepository.findFirstByImageTypeAndRelatedIdOrderByOrderIndexAsc(ImageType.USER, opponent.getId())
-                                    .map(Image::getUrl)
-                                    .orElse(null);
+                        Long opponentId = room.getParticipants().stream()
+                                .map(ChatParticipant::getUserId)
+                                .filter(id -> !id.equals(userId))
+                                .findFirst()
+                                .orElse(null);
+                        UserResponseDto opponent = userInfoMap.get(opponentId);
+                        if (opponent != null) {
+                            roomName = opponent.firstName() + " " + opponent.lastName();
+                            roomImageUrl = opponent.ImageUrl();
                         } else {
                             roomName = "(알 수 없는 사용자)";
-                            roomImageUrl = null;
                         }
-
                     } else {
                         roomName = room.getRoomName();
-                        roomImageUrl = imageRepository.findFirstByImageTypeAndRelatedIdOrderByOrderIndexAsc(ImageType.CHAT_ROOM, room.getId())
-                                .map(Image::getUrl)
-                                .orElse(null);
+                        roomImageUrl = groupChatImagesMap.get(room.getId());
                     }
 
-
                     return new ChatRoomSummaryResponse(
-                            room.getId(),
-                            roomName,
-                            lastMessageContent,
-                            lastMessageTime,
-                            roomImageUrl,
-                            unreadCount,
-                            participantCount
+                            roomId, roomName, lastMessageContent, lastMessageTime,
+                            roomImageUrl, unreadCount, participantCount
                     );
-                })
+                }).sorted(Comparator.comparing(ChatRoomSummaryResponse::lastMessageTime, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
-    }
-    @Transactional
-    public ChatRoom createRoom(Long currentUserId, Long otherUserId) {
-        Optional<ChatRoom> existingRoom = chatRoomRepo.findByParticipantIds(currentUserId, otherUserId);
-        return existingRoom.map(chatRoom -> handleExistingRoom(chatRoom, currentUserId)).orElseGet(() -> createNewOneToOneChatRoom(currentUserId, otherUserId));
+
+        return summaries;
     }
 
-    private ChatRoom handleExistingRoom(ChatRoom room, Long currentUserId) {
+    /**
+     * 🥫 식료품 창고(Repository)에 가서 마지막 메시지들을 가져온 후,
+     * 메인 셰프가 쓰기 편하게 Map 그릇에 담아 반환합니다.
+     */
+    private Map<Long, ChatMessage> findLatestMessageForRooms(List<Long> roomIds) {
+        List<ChatMessage> latestMessages = chatMessageRepository.findLatestMessagesForRooms(roomIds);
 
-        Optional<ChatParticipant> currentParticipant = room.getParticipants().stream()
-                .filter(p -> p.getUser().getId().equals(currentUserId))
-                .findFirst();
-        if (currentParticipant.isPresent() && currentParticipant.get().getStatus() == ChatParticipantStatus.LEFT) {
-            currentParticipant.get().reJoin();
+        return latestMessages.stream()
+                .collect(Collectors.toMap(ChatMessage::getChatRoomId, message -> message, (m1, m2) -> m1));
+    }
+
+    /**
+     * 🥫 식료품 창고(Repository)에 가서 안 읽은 메시지 수를 계산해 온 후,
+     * 메인 셰프가 쓰기 편하게 Map 그릇에 담아 반환합니다.
+     */
+    private Map<Long, Long> countUnreadMessagesGroupedByRoomId(Map<Long, Instant> lastReadAtMap) {
+        if (lastReadAtMap.isEmpty()) {
+            return Collections.emptyMap();
         }
-        return room;
+
+        List<Map<String, Object>> conditions = lastReadAtMap.entrySet().stream()
+                .map(entry -> Map.<String, Object>of(
+                        "room_id", entry.getKey(),
+                        "sent_at", Map.of("$gt", entry.getValue())
+                ))
+                .toList();
+
+        List<UnreadCountDto> unreadCounts = chatMessageRepository.countUnreadMessagesGroupedByRoomId(conditions);
+
+
+        return unreadCounts.stream()
+                .collect(Collectors.toMap(UnreadCountDto::roomId, UnreadCountDto::unreadCount));
     }
 
-    private ChatRoom createNewOneToOneChatRoom(Long userId1, Long userId2) {
-        User currentUser = userRepository.findById(userId1)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        User otherUser = userRepository.findById(userId2)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        ChatRoom newRoom = new ChatRoom(false, Instant.now(), "1:1 채팅방");
+    @Transactional
+    public ChatRoom findOrCreateOneToOneRoom(Long currentUserId, Long otherUserId) {
 
-        ChatParticipant participant1 = new ChatParticipant(newRoom, currentUser);
-        ChatParticipant participant2 = new ChatParticipant(newRoom, otherUser);
+        return chatRoomRepo.findOneToOneRoomByParticipantIds(currentUserId, otherUserId)
+                .map(room -> {
+                    participantRepo.findByChatRoomAndUserId(room, currentUserId)
+                            .filter(p -> p.getStatus() == ChatParticipantStatus.LEFT)
+                            .ifPresent(ChatParticipant::reJoin);
+                    return room;
+                })
+                .orElseGet(() -> createNewOneToOneRoom(currentUserId, otherUserId));
+    }
+
+    private ChatRoom createNewOneToOneRoom(Long userId1, Long userId2) {
+
+        ChatRoom newRoom = new ChatRoom(false, Instant.now());
+
+        ChatParticipant participant1 = new ChatParticipant(newRoom, userId1);
+        ChatParticipant participant2 = new ChatParticipant(newRoom, userId2);
 
         newRoom.addParticipant(participant1);
         newRoom.addParticipant(participant2);
@@ -193,76 +228,103 @@ public class ChatService {
     }
 
 
-    public List<ChatParticipant> getParticipants(Long roomId) {
-        return participantRepo.findByChatRoomId(roomId);
-    }
+    @Transactional(readOnly = true)
     public List<ChatRoomParticipantsResponse> getRoomParticipants(Long roomId) {
-        ChatRoom chatRoom = chatRoomRepository.findById(roomId)
+        ChatRoom chatRoom = chatRoomRepo.findById(roomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
+        Long ownerId = chatRoom.getOwnerId();
 
-        List<ChatParticipant> participants = chatParticipantRepository.findByChatRoom(chatRoom);
+        List<ChatParticipant> participants = participantRepo.findByChatRoomId(roomId);
+        if (participants.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> userIds = participants.stream()
+                .map(ChatParticipant::getUserId)
+                .toList();
+
+        Map<Long, UserResponseDto> userInfoMap = userClient.getUsersInfo(userIds).stream()
+                .collect(Collectors.toMap(UserResponseDto::userId, dto -> dto));
+
         return participants.stream()
                 .map(p -> {
-                    String userImageUrl = imageRepository.findFirstByImageTypeAndRelatedIdOrderByOrderIndexAsc(
-                                    ImageType.USER, p.getUser().getId())
-                            .map(Image::getUrl)
-                            .orElse(null);
+                    UserResponseDto userInfo = userInfoMap.get(p.getUserId());
+                    if (userInfo == null) {
+                        // main-service에서 정보를 가져오지 못한 경우 (탈퇴한 사용자 등)
+                        return new ChatRoomParticipantsResponse(p.getUserId(), "(알 수 없음)", "", null, false);
+                    }
 
-                    boolean isHost = chatRoom.getOwner() != null && chatRoom.getOwner().getId().equals(p.getUser().getId());
+                    boolean isHost = ownerId != null && ownerId.equals(p.getUserId());
 
                     return new ChatRoomParticipantsResponse(
-                            p.getUser().getId(),
-                            p.getUser().getFirstName(),
-                            p.getUser().getLastName(),
-                            userImageUrl,
+                            userInfo.userId(),
+                            userInfo.firstName(),
+                            userInfo.lastName(),
+                            userInfo.ImageUrl(),
                             isHost
                     );
                 })
                 .collect(Collectors.toList());
     }
     /**
-            * @apiNote 채팅방 메시지를 무한 스크롤로 조회하는 핵심 로직입니다.
-     * 이 메서드는 항상 ChatMessage 엔티티 목록을 반환합니다.
+     * @apiNote 채팅방 메시지를 무한 스크롤로 조회하는 핵심 로직입니다.
+     * 이 메서드는 항상 ChatMessage Document 목록을 반환합니다.
      *
-             * @param roomId 채팅방 ID
-     * @param userId 조회하는 사용자 ID
+     * @param roomId 채팅방 ID
      * @param lastMessageId 마지막으로 조회된 메시지 ID (무한 스크롤용)
-     * @return ChatMessage 엔티티 목록
+     * @return ChatMessage Document 목록
      */
     @Transactional(readOnly = true)
-    public List<ChatMessage> getRawMessages(Long roomId, Long userId, Long lastMessageId) {
+    public List<ChatMessage> getRawMessages(Long roomId, String lastMessageId) { // lastMessageId 타입 변경
+
+        // RDBMS의 ChatParticipant 테이블은 그대로 사용한다고 가정
+        // 메인 서비스와 채팅 서비스가 분리되어 있다면, 이 로직은 API 호출로 대체될 수 있음
         ChatParticipant participant = chatParticipantRepository.findByChatRoomIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_PARTICIPANT_NOT_FOUND));
+
+        // MongoDB의 Pageable 객체
+        Pageable pageable = PageRequest.of(0, MESSAGE_PAGE_SIZE, Sort.by("sentAt").descending());
 
         if (participant.getStatus() == ChatParticipantStatus.LEFT && participant.getLastLeftAt() != null) {
             Instant lastLeftAt = participant.getLastLeftAt();
 
+            // MongoDB는 sentAt과 id를 동시에 사용한 쿼리가 RDBMS와 다름
+            // lastMessageId가 있으면, 해당 메시지보다 오래된 메시지들을 찾음
             if (lastMessageId != null) {
-                return chatMessageRepository.findByChatRoomIdAndSentAtAfterAndIdBefore(
-                        roomId, lastLeftAt, lastMessageId,
-                        PageRequest.of(0, MESSAGE_PAGE_SIZE, Sort.by("sentAt").descending())
+                // lastMessageId의 sentAt을 먼저 조회하여 sentAtBefore 쿼리에 사용
+                Instant lastMessageSentAt = chatMessageRepository.findById(lastMessageId)
+                        .map(ChatMessage::getSentAt)
+                        .orElse(null);
+
+                // lastMessageSentAt보다 오래된 메시지 중 lastLeftAt 이후 메시지 조회
+                return chatMessageRepository.findByChatRoomIdAndSentAtAfterAndSentAtBefore(
+                        roomId, lastLeftAt, lastMessageSentAt, pageable
                 );
             } else {
+                // 채팅방을 나간 후의 메시지 조회
                 return chatMessageRepository.findByChatRoomIdAndSentAtAfter(
-                        roomId, lastLeftAt,
-                        PageRequest.of(0, MESSAGE_PAGE_SIZE, Sort.by("sentAt").descending())
+                        roomId, lastLeftAt, pageable
                 );
             }
-        } else {
+        } else { // 채팅방에 참여 중인 상태
             if (lastMessageId != null) {
-                return chatMessageRepository.findByChatRoomIdAndIdBefore(
-                        roomId, lastMessageId,
-                        PageRequest.of(0, MESSAGE_PAGE_SIZE, Sort.by("sentAt").descending())
+                // lastMessageId의 sentAt을 먼저 조회하여 sentAtBefore 쿼리에 사용
+                Instant lastMessageSentAt = chatMessageRepository.findById(lastMessageId)
+                        .map(ChatMessage::getSentAt)
+                        .orElse(null);
+
+                // lastMessageSentAt보다 오래된 메시지 조회
+                return chatMessageRepository.findByChatRoomIdAndSentAtBefore(
+                        roomId, lastMessageSentAt, pageable
                 );
             } else {
+                // 가장 최신 메시지 조회
                 return chatMessageRepository.findByChatRoomId(
-                        roomId,
-                        PageRequest.of(0, MESSAGE_PAGE_SIZE, Sort.by("sentAt").descending())
+                        roomId, pageable
                 );
             }
         }
     }
-
     /**
      * @apiNote 채팅방 메시지를 조회하고, 번역 요청에 따라 ChatMessageResponse 목록을 반환합니다.
      * 이 메서드가 컨트롤러에서 호출되는 주된 엔드포인트가 됩니다.

@@ -1,30 +1,18 @@
 package core.domain.chat.controller;
 
 import core.domain.chat.dto.*;
-import core.domain.chat.entity.ChatMessage;
-import core.domain.chat.entity.ChatParticipant;
 import core.domain.chat.entity.ChatRoom;
 import core.domain.chat.repository.ChatMessageRepository;
 import core.domain.chat.repository.ChatParticipantRepository;
 import core.domain.chat.repository.ChatRoomRepository;
 import core.domain.chat.service.ChatService;
-import core.domain.chat.service.ForbiddenWordService;
 import core.domain.chat.service.TranslationService;
-import core.domain.user.entity.User;
-import core.domain.user.repository.UserRepository;
 import core.global.config.CustomUserDetails;
 import core.global.dto.ApiResponse;
-
-import core.global.enums.ChatParticipantStatus;
-import core.global.enums.ErrorCode;
-import core.global.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -32,13 +20,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import lombok.extern.slf4j.Slf4j;
+
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Tag(name = "채팅 API", description = "1:1 채팅, 그룹 채팅, 메시지 검색/삭제 등 채팅 기능 API")
 @RestController
@@ -47,14 +31,12 @@ import java.util.stream.Collectors;
 public class ChatController {
     private final ChatService chatService;
     private final Logger log = LoggerFactory.getLogger(ChatController.class);
-    private final UserRepository userRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final TranslationService translationService;
-    public ChatController(ChatService chatService, UserRepository userRepository, ChatRoomRepository chatRoomRepository, ChatParticipantRepository chatParticipantRepository, ChatMessageRepository chatMessageRepository, TranslationService translationService) {
+    public ChatController(ChatService chatService, ChatRoomRepository chatRoomRepository, ChatParticipantRepository chatParticipantRepository, ChatMessageRepository chatMessageRepository, TranslationService translationService) {
         this.chatService = chatService;
-        this.userRepository = userRepository;
         this.chatRoomRepository = chatRoomRepository;
         this.chatParticipantRepository = chatParticipantRepository;
         this.chatMessageRepository = chatMessageRepository;
@@ -76,7 +58,7 @@ public class ChatController {
     ) {
         CustomUserDetails principal = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Long userId = principal.getUserId();
-        ChatRoom room = chatService.createRoom(userId, request.otherUserId());
+        ChatRoom room = chatService.findOrCreateOneToOneRoom(userId, request.otherUserId());
         ChatRoomResponse response = ChatRoomResponse.from(room);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
