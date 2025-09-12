@@ -250,7 +250,6 @@ public class ChatService {
                 .map(p -> {
                     UserResponseDto userInfo = userInfoMap.get(p.getUserId());
                     if (userInfo == null) {
-                        // main-service에서 정보를 가져오지 못한 경우 (탈퇴한 사용자 등)
                         return new ChatRoomParticipantsResponse(p.getUserId(), "(알 수 없음)", "", null, false);
                     }
 
@@ -266,142 +265,138 @@ public class ChatService {
                 })
                 .collect(Collectors.toList());
     }
+
     /**
-     * @apiNote 채팅방 메시지를 무한 스크롤로 조회하는 핵심 로직입니다.
-     * 이 메서드는 항상 ChatMessage Document 목록을 반환합니다.
-     *
-     * @param roomId 채팅방 ID
-     * @param lastMessageId 마지막으로 조회된 메시지 ID (무한 스크롤용)
-     * @return ChatMessage Document 목록
+     * @apiNote 채팅방 메시지를 조회하고, 사용자 정보와 번역을 추가하여 최종 응답 DTO를 만듭니다.
      */
     @Transactional(readOnly = true)
-    public List<ChatMessage> getRawMessages(Long roomId, String lastMessageId) { // lastMessageId 타입 변경
+    public List<ChatMessageResponse> getMessages(Long roomId, Long userId, String lastMessageId) {
+        List<ChatMessage> messages = getRawMessages(roomId, userId, lastMessageId);
+        if (messages.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<Long> senderIds = messages.stream()
+                .map(ChatMessage::getSenderId)
+                .collect(Collectors.toSet());
 
-        // RDBMS의 ChatParticipant 테이블은 그대로 사용한다고 가정
-        // 메인 서비스와 채팅 서비스가 분리되어 있다면, 이 로직은 API 호출로 대체될 수 있음
-        ChatParticipant participant = chatParticipantRepository.findByChatRoomIdAndUserId(roomId, userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_PARTICIPANT_NOT_FOUND));
+        Map<Long, UserResponseDto> userInfoMap = userClient.getUsersInfo(new ArrayList<>(senderIds)).stream()
+                .collect(Collectors.toMap(UserResponseDto::userId, dto -> dto));
 
-        // MongoDB의 Pageable 객체
-        Pageable pageable = PageRequest.of(0, MESSAGE_PAGE_SIZE, Sort.by("sentAt").descending());
-
-        if (participant.getStatus() == ChatParticipantStatus.LEFT && participant.getLastLeftAt() != null) {
-            Instant lastLeftAt = participant.getLastLeftAt();
-
-            // MongoDB는 sentAt과 id를 동시에 사용한 쿼리가 RDBMS와 다름
-            // lastMessageId가 있으면, 해당 메시지보다 오래된 메시지들을 찾음
-            if (lastMessageId != null) {
-                // lastMessageId의 sentAt을 먼저 조회하여 sentAtBefore 쿼리에 사용
-                Instant lastMessageSentAt = chatMessageRepository.findById(lastMessageId)
-                        .map(ChatMessage::getSentAt)
-                        .orElse(null);
-
-                // lastMessageSentAt보다 오래된 메시지 중 lastLeftAt 이후 메시지 조회
-                return chatMessageRepository.findByChatRoomIdAndSentAtAfterAndSentAtBefore(
-                        roomId, lastLeftAt, lastMessageSentAt, pageable
-                );
-            } else {
-                // 채팅방을 나간 후의 메시지 조회
-                return chatMessageRepository.findByChatRoomIdAndSentAtAfter(
-                        roomId, lastLeftAt, pageable
-                );
-            }
-        } else { // 채팅방에 참여 중인 상태
-            if (lastMessageId != null) {
-                // lastMessageId의 sentAt을 먼저 조회하여 sentAtBefore 쿼리에 사용
-                Instant lastMessageSentAt = chatMessageRepository.findById(lastMessageId)
-                        .map(ChatMessage::getSentAt)
-                        .orElse(null);
-
-                // lastMessageSentAt보다 오래된 메시지 조회
-                return chatMessageRepository.findByChatRoomIdAndSentAtBefore(
-                        roomId, lastMessageSentAt, pageable
-                );
-            } else {
-                // 가장 최신 메시지 조회
-                return chatMessageRepository.findByChatRoomId(
-                        roomId, pageable
-                );
+        ChatParticipant currentUserParticipant = chatParticipantRepository.findByChatRoomIdAndUserId(roomId, userId).get();
+        Map<String, String> translatedContentMap = new HashMap<>();
+        if (currentUserParticipant.isTranslateEnabled()) {
+            String targetLanguage = userClient.getUserProfile(userId).translateLanguage();
+            if (targetLanguage != null && !targetLanguage.isEmpty()) {
+                List<String> contentsToTranslate = messages.stream().map(ChatMessage::getContent).toList();
+                List<String> translatedContents = translationService.translateMessages(contentsToTranslate, targetLanguage);
+                for (int i = 0; i < contentsToTranslate.size(); i++) {
+                    translatedContentMap.put(contentsToTranslate.get(i), translatedContents.get(i));
+                }
             }
         }
+
+        return messages.stream()
+                .map(message -> {
+                    UserResponseDto senderInfo = userInfoMap.get(message.getSenderId());
+                    String translatedContent = translatedContentMap.get(message.getContent());
+                    return createChatMessageResponse(message, senderInfo, translatedContent);
+                })
+                .collect(Collectors.toList());
+    }
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getMessagesAround(Long roomId, Long userId, String targetMessageId) {
+
+
+        List<ChatMessage> olderMessages = chatMessageRepository.findTop20ByChatRoomIdAndIdLessThanOrderByIdDesc(roomId, targetMessageId);
+        Collections.reverse(olderMessages);
+        ChatMessage targetMessage = chatMessageRepository.findById(targetMessageId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_MESSAGE_NOT_FOUND));
+        List<ChatMessage> newerMessages = chatMessageRepository.findTop20ByChatRoomIdAndIdGreaterThanOrderByIdAsc(roomId, targetMessageId);
+        List<ChatMessage> combinedMessages = new ArrayList<>();
+        combinedMessages.addAll(olderMessages);
+        combinedMessages.add(targetMessage);
+        combinedMessages.addAll(newerMessages);
+
+        Set<Long> senderIds = combinedMessages.stream()
+                .map(ChatMessage::getSenderId)
+                .collect(Collectors.toSet());
+
+        Map<Long, UserResponseDto> userInfoMap = userClient.getUsersInfo(new ArrayList<>(senderIds)).stream()
+                .collect(Collectors.toMap(UserResponseDto::userId, dto -> dto));
+
+        ChatParticipant currentUserParticipant = chatParticipantRepository.findByChatRoomIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHAT_PARTICIPANT));
+        Map<String, String> translatedContentMap = new HashMap<>();
+
+        if (currentUserParticipant.isTranslateEnabled()) {
+            String targetLanguage = userClient.getUserProfile(userId).translateLanguage();
+            if (targetLanguage != null && !targetLanguage.isEmpty()) {
+                List<String> contentsToTranslate = combinedMessages.stream().map(ChatMessage::getContent).toList();
+                List<String> translatedContents = translationService.translateMessages(contentsToTranslate, targetLanguage);
+                for (int i = 0; i < contentsToTranslate.size(); i++) {
+                    translatedContentMap.put(contentsToTranslate.get(i), translatedContents.get(i));
+                }
+            }
+        }
+
+        // ✨ 5. 이전에 만들었던 '헬퍼 메소드'를 재사용하여 최종 응답 DTO를 만듭니다.
+        return combinedMessages.stream()
+                .map(message -> {
+                    UserResponseDto senderInfo = userInfoMap.get(message.getSenderId());
+                    String translatedContent = translatedContentMap.get(message.getContent());
+                    return createChatMessageResponse(message, senderInfo, translatedContent); // 헬퍼 메소드 재사용
+                })
+                .collect(Collectors.toList());
     }
     /**
-     * @apiNote 채팅방 메시지를 조회하고, 번역 요청에 따라 ChatMessageResponse 목록을 반환합니다.
-     * 이 메서드가 컨트롤러에서 호출되는 주된 엔드포인트가 됩니다.
-     *
-     * @param roomId 채팅방 ID
-     * @param userId 조회하는 사용자 ID
-     * @param lastMessageId 마지막으로 조회된 메시지 ID (무한 스크롤용)
-     * @return ChatMessageResponse 목록
+     * @apiNote MongoDB에서 순수 ChatMessage 목록을 조회합니다. (내부 전용 private 메소드)
      */
-
-
-    @Transactional(readOnly = true)
-    public List<ChatMessageResponse> getMessages(
-            Long roomId,
-            Long userId,
-            Long lastMessageId
-
-    ) {
+    private List<ChatMessage> getRawMessages(Long roomId, Long userId, String lastMessageId) {
         ChatParticipant participant = chatParticipantRepository.findByChatRoomIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHAT_PARTICIPANT));
 
-        boolean needsTranslation = participant.isTranslateEnabled();
-        String targetLanguage = participant.getUser().getTranslateLanguage();
+        Pageable pageable = PageRequest.of(0, 50, Sort.by("sentAt").descending());
 
-        List<ChatMessage> messages = getRawMessages(roomId, userId, lastMessageId);
+        Instant sentAtAfter = (participant.getStatus() == ChatParticipantStatus.LEFT) ? participant.getLastLeftAt() : null;
+        Instant sentAtBefore = null;
 
-        if (needsTranslation && targetLanguage != null && !targetLanguage.isEmpty()) {
-            List<String> originalContents = messages.stream()
-                    .map(ChatMessage::getContent)
-                    .collect(Collectors.toList());
-            List<String> translatedContents = translationService.translateMessages(originalContents, targetLanguage);
-
-            return IntStream.range(0, messages.size())
-                    .mapToObj(i -> {
-                        ChatMessage message = messages.get(i);
-                        String translatedContent = translatedContents.get(i);
-                        User sender = message.getSender();
-                        String senderImageUrl = imageRepository.findFirstByImageTypeAndRelatedIdOrderByOrderIndexAsc(ImageType.USER, sender.getId())
-                                .map(Image::getUrl)
-                                .orElse(null);
-
-                        return new ChatMessageResponse(
-                                message.getId(),
-                                message.getChatRoom().getId(),
-                                sender.getId(),
-                                message.getContent(),
-                                translatedContent,
-                                message.getSentAt(),
-                                sender.getFirstName(),
-                                sender.getLastName(),
-                                senderImageUrl
-                        );
-                    }).collect(Collectors.toList());
+        if (lastMessageId != null && !lastMessageId.isEmpty()) {
+            sentAtBefore = chatMessageRepository.findById(lastMessageId)
+                    .map(ChatMessage::getSentAt)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_MESSAGE_NOT_FOUND));
         }
 
-        else {
-            return messages.stream()
-                    .map(message -> {
-                        User sender = message.getSender();
-                        String senderImageUrl = imageRepository.findFirstByImageTypeAndRelatedIdOrderByOrderIndexAsc(ImageType.USER, sender.getId())
-                                .map(Image::getUrl)
-                                .orElse(null);
-
-                        return new ChatMessageResponse(
-                                message.getId(),
-                                message.getChatRoom().getId(),
-                                sender.getId(),
-                                message.getContent(),
-                                null,
-                                message.getSentAt(),
-                                sender.getFirstName(),
-                                sender.getLastName(),
-                                senderImageUrl
-                        );
-                    }).collect(Collectors.toList());
+        if (sentAtAfter != null && sentAtBefore != null) {
+            return chatMessageRepository.findByChatRoomIdAndSentAtAfterAndSentAtBefore(roomId, sentAtAfter, sentAtBefore, pageable);
+        } else if (sentAtAfter != null) {
+            return chatMessageRepository.findByChatRoomIdAndSentAtAfter(roomId, sentAtAfter, pageable);
+        } else if (sentAtBefore != null) {
+            return chatMessageRepository.findByChatRoomIdAndSentAtBefore(roomId, sentAtBefore, pageable);
+        } else {
+            return chatMessageRepository.findByChatRoomId(roomId, pageable);
         }
     }
+    /**
+     * @apiNote ChatMessageResponse DTO 생성을 위한 private 헬퍼 메소드
+     */
+    private ChatMessageResponse createChatMessageResponse(ChatMessage message, UserResponseDto senderInfo, String translatedContent) {
+        String firstName = (senderInfo != null) ? senderInfo.firstName() : "(알 수 없음)";
+        String lastName = (senderInfo != null) ? senderInfo.lastName() : "";
+        String imageUrl = (senderInfo != null) ? senderInfo.ImageUrl() : null;
+
+        return new ChatMessageResponse(
+                message.getId(),
+                message.getChatRoomId(),
+                message.getSenderId(),
+                message.getContent(),
+                translatedContent,
+                message.getSentAt(),
+                firstName,
+                lastName,
+                imageUrl
+        );
+    }
+
 
     @Transactional
     public ChatMessage saveMessage(Long roomId, Long senderId, String content) {

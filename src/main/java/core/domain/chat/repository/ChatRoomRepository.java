@@ -15,22 +15,6 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
     @Query("SELECT cr FROM ChatRoom cr WHERE cr.group = true AND LOWER(cr.roomName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<ChatRoom> findGroupChatRoomsByKeyword(@Param("keyword") String keyword);
-    @Query("""
-            select distinct cr
-            from ChatRoom cr
-            left join fetch cr.participants cp
-            left join fetch cp.user u
-            where exists (
-              select 1 from ChatParticipant c1
-              where c1.chatRoom = cr and c1.user.id = :currentUserId
-            )
-            and exists (
-              select 1 from ChatParticipant c2
-              where c2.chatRoom = cr and c2.user.id = :otherUserId
-            )
-            and size(cr.participants) = 2
-            """)
-    Optional<ChatRoom> findByParticipantIds(Long currentUserId, Long otherUserId);
 
 
     List<ChatRoom> findTop10ByGroupTrueOrderByCreatedAtDesc();

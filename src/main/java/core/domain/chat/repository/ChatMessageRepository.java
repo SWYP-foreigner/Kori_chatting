@@ -2,9 +2,11 @@ package core.domain.chat.repository;
 
 import core.domain.chat.dto.UnreadCountDto;
 import core.domain.chat.entity.ChatMessage;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +40,34 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     })
     List<UnreadCountDto> countUnreadMessagesGroupedByRoomId(List<Map<String, Object>> conditions);
     void deleteByChatRoomId(Long chatRoomId);
+
+    /**
+     * 특정 시간 사이의 메시지를 조회합니다. (채팅방 나간 후 스크롤 시)
+     */
+    List<ChatMessage> findByChatRoomIdAndSentAtAfterAndSentAtBefore(
+            Long chatRoomId, Instant sentAtAfter, Instant sentAtBefore, Pageable pageable
+    );
+
+    /**
+     * 특정 시간 이후의 메시지를 조회합니다. (채팅방 나간 후 첫 페이지)
+     */
+    List<ChatMessage> findByChatRoomIdAndSentAtAfter(
+            Long chatRoomId, Instant sentAtAfter, Pageable pageable
+    );
+
+    /**
+     * 특정 시간 이전의 메시지를 조회합니다. (참여 중 스크롤 시)
+     */
+    List<ChatMessage> findByChatRoomIdAndSentAtBefore(
+            Long chatRoomId, Instant sentAtBefore, Pageable pageable
+    );
+
+    List<ChatMessage> findByChatRoomId(
+            Long chatRoomId, Pageable pageable
+    );
+    List<ChatMessage> findTop20ByChatRoomIdAndIdLessThanOrderByIdDesc(Long chatRoomId, String id);
+
+    List<ChatMessage> findTop20ByChatRoomIdAndIdGreaterThanOrderByIdAsc(Long chatRoomId, String id);
 }
 
 
