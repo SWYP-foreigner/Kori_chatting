@@ -4,7 +4,6 @@ import core.domain.chat.dto.*;
 import core.domain.chat.entity.ChatRoom;
 import core.domain.chat.service.ChatMessageService;
 import core.domain.chat.service.ChatRoomService;
-import core.global.image.repository.ImageRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -500,20 +500,18 @@ public class ChatMessageService {
      * [개선] 마지막 메시지의 내용을 반환합니다.
      */
     public String getLastMessageContent(Long roomId) {
-        // 헬퍼 메서드를 호출하여 마지막 메시지를 조회하고, 내용(content)만 반환합니다.
         return getLastMessage(roomId)
                 .map(ChatMessage::getContent)
-                .orElse(null); // 메시지가 없으면 null 반환
+                .orElse(null);
     }
 
     /**
      * [개선] 마지막 메시지의 전송 시간을 반환합니다.
      */
     public Instant getLastMessageTime(Long roomId) {
-        // 헬퍼 메서드를 호출하여 마지막 메시지를 조회하고, 시간(sentAt)만 반환합니다.
         return getLastMessage(roomId)
                 .map(ChatMessage::getSentAt)
-                .orElse(null); // 메시지가 없으면 null 반환
+                .orElse(null);
     }
 
     /**

@@ -2,7 +2,6 @@ package core.global.service;
 
 import com.google.cloud.translate.v3.*;
 import core.domain.user.entity.User;
-import core.domain.user.repository.UserRepository;
 import core.global.enums.ErrorCode;
 import core.global.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +23,6 @@ public class TranslationService {
 
     @Value("${google.cloud.project.id}")
     private String projectId;
-    private final UserRepository userRepository;
 
 
 
@@ -59,44 +57,6 @@ public class TranslationService {
             );
         }
     }
-
-
-
-    @Transactional
-    public void saveUserLanguage(Authentication auth, String language) {
-        log.info("인증된 사용자 이메일: {}", auth.getName());
-
-        User user = userRepository.findByEmail(auth.getName())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-    /**
-     * (EN) 이 부분에서 EN 만 추출하는 코드
-     */
-        Pattern pattern = Pattern.compile("\\((.*?)\\)");
-        Matcher matcher = pattern.matcher(language);
-
-        // 추출된 언어 코드를 저장할 변수
-        String extractedCode = "";
-
-        if (matcher.find()) {
-            extractedCode = matcher.group(1).trim().toLowerCase();
-        }
-
-        /*
-         추출된 언어 코드를 translateLanguage 필드에 저장
-         */
-        if (!extractedCode.isEmpty()) {
-            user.updateTranslateLanguage(extractedCode);
-        } else {
-            // 괄호가 없을 경우, 전체 문자열을 소문자로 저장
-            user.updateLanguage(language.toLowerCase().trim());
-        }
-
-        userRepository.save(user);
-        log.info("사용자 언어 및 번역 언어 저장 완료: userId={}, language={}, translateLanguage={}",
-                user.getId(), user.getLanguage(), user.getTranslateLanguage());
-    }
-
 
 
 }

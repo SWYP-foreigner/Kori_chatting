@@ -64,6 +64,7 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
      * [추가] 특정 채팅방에서 시간을 기준으로 가장 최신 메시지 1개를 조회합니다.
      */
     Optional<ChatMessage> findTopByChatRoomIdOrderBySentAtDesc(Long chatRoomId);
+    void deleteByChatRoomId(Long chatRoomId);
 }
 
 

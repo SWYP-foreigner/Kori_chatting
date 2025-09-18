@@ -77,4 +77,13 @@ public class ChatRoom {
         this.ownerId = ownerId;
     }
 
+    /**
+     *
+     * 채팅방의 방장을 새로운 사용자로 변경합니다.
+     * @param newOwnerId 새로운 방장이 될 사용자의 ID
+     */
+    public void changeOwner(Long newOwnerId) {
+        this.ownerId = newOwnerId;
+    }
+
 }
