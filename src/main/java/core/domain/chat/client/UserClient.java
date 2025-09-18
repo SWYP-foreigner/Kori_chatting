@@ -1,5 +1,6 @@
 package core.domain.chat.client;
 
+import core.domain.chat.dto.ChatUserProfileResponse;
 import core.domain.chat.dto.ImageDto;
 import core.domain.chat.dto.UserResponseDto;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -12,11 +13,14 @@ import java.util.List;
 @FeignClient(name = "main-service", url = "${main.service.url}")
 public interface UserClient {
 
-    @GetMapping("/api/v1/users/{userId}/info")
+    @GetMapping("/api/v1/member/{userId}/info")
     UserResponseDto getUserProfile(@PathVariable("userId") Long userId);
 
-    @GetMapping("/api/v1/users/infos")
+    @GetMapping("/api/v1/member/infos")
     List<UserResponseDto> getUsersInfo(@RequestParam("userIds") List<Long> userIds);
+
+    @GetMapping("/api/v1/member/{userId}/chat_profile")
+    ChatUserProfileResponse getUserChatProfile(@PathVariable("userId") Long userId);
 
     @GetMapping("/api/v1/images/chat-rooms")
     List<ImageDto> getImagesForChatRooms(@RequestParam("roomIds") List<Long> roomIds);
