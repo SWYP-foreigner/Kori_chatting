@@ -1,1 +1,0 @@
-package core.domain.chat.dto;

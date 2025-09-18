@@ -2,7 +2,8 @@ package core.domain.chat.controller;
 
 import core.domain.chat.dto.*;
 import core.domain.chat.entity.ChatRoom;
-import core.domain.chat.service.ChatService;
+import core.domain.chat.service.ChatMessageService;
+import core.domain.chat.service.ChatRoomService;
 import core.global.image.repository.ImageRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -13,15 +14,20 @@ import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+
 @Controller
 @RequiredArgsConstructor
 public class ChatWebSocketController {
 
-    private final ChatService chatService;
+    private final ChatMessageService chatMessageService;
+    private final ChatRoomService chatRoomService;
     private final SimpMessagingTemplate messagingTemplate;
     private final SimpMessageSendingOperations template;
     private final Logger log = LoggerFactory.getLogger(ChatWebSocketController.class);
     private final ImageRepository imageRepository;
+
+
+
     /**
      * @apiNote 새로운 메시지를 전송하고, 해당 채팅방의 구독자들에게 브로드캐스트합니다.
      *
@@ -30,7 +36,7 @@ public class ChatWebSocketController {
     @MessageMapping("/chat.sendMessage")
     public void sendMessage(SendMessageRequest req) {
         try {
-            chatService.processAndSendChatMessage(req);
+            chatMessageService.processAndSendChatMessage(req);
 
             log.info("메시지 및 요약 전송 성공: roomId={}, senderId={}", req.roomId(), req.senderId());
         } catch (Exception e) {
@@ -58,22 +64,22 @@ public class ChatWebSocketController {
     public void markMessagesAsRead(@Payload MarkAsReadRequest req) {
         try {
             Long userId = req.userId();
-            chatService.markMessagesAsRead(req.roomId(), userId, req.lastReadMessageId());
+            chatMessageService.markMessagesAsRead(req.roomId(), userId, req.lastReadMessageId());
 
             messagingTemplate.convertAndSend(
                     "/topic/rooms/" + req.roomId() + "/read-status",
                     new ReadStatusResponse(req.roomId(), userId, req.lastReadMessageId())
             );
 
-            ChatRoom chatRoom = chatService.getChatRoomById(req.roomId());
+            ChatRoom chatRoom = chatRoomService.getChatRoomById(req.roomId());
 
-            int unreadCount = chatService.countUnreadMessages(req.roomId(),userId);
+            int unreadCount = chatMessageService.countUnreadMessages(req.roomId(),userId);
 
             ChatRoomSummaryResponse summary = ChatRoomSummaryResponse.from(
                     chatRoom,
                     userId,
-                    chatService.getLastMessageContent(req.roomId()),
-                    chatService.getLastMessageTime(req.roomId()),
+                    chatMessageService.getLastMessageContent(req.roomId()),
+                    chatMessageService.getLastMessageTime(req.roomId()),
                     unreadCount,
                     imageRepository
             );
@@ -86,6 +92,19 @@ public class ChatWebSocketController {
             log.error("메시지 읽음 처리 실패", e);
         }
     }
-
+    /**
+     * @apiNote 메시지 삭제를 처리하고, 해당 채팅방의 모든 참여자에게 삭제 사실을 알립니다.
+     *
+     * @param req 삭제 요청 정보 (messageId, userId)
+     */
+    @MessageMapping("/chat.deleteMessage")
+    public void deleteMessage(@Payload DeleteMessageRequest req) {
+        try {
+            chatMessageService.deleteMessageAndBroadcast(req.messageId(), req.senderId());
+            log.info("메시지 삭제 요청 처리: messageId={}, userId={}", req.messageId(), req.senderId());
+        } catch (Exception e) {
+            log.error("메시지 삭제 처리 중 에러 발생", e);
+        }
+    }
 
 }

@@ -1,4 +1,4 @@
-package core.domain.notification.entity;
+package core.domain.user.notification.entity;
 
 import core.domain.user.entity.User;
 import core.global.enums.NotificationType;

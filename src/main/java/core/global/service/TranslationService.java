@@ -1,4 +1,4 @@
-package core.domain.chat.service;
+package core.global.service;
 
 import com.google.cloud.translate.v3.*;
 import core.domain.user.entity.User;
