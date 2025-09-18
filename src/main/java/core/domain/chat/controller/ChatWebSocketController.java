@@ -20,13 +20,8 @@ import org.springframework.stereotype.Controller;
 public class ChatWebSocketController {
 
     private final ChatMessageService chatMessageService;
-    private final ChatRoomService chatRoomService;
-    private final SimpMessagingTemplate messagingTemplate;
     private final SimpMessageSendingOperations template;
     private final Logger log = LoggerFactory.getLogger(ChatWebSocketController.class);
-    private final ImageRepository imageRepository;
-
-
 
     /**
      * @apiNote 새로운 메시지를 전송하고, 해당 채팅방의 구독자들에게 브로드캐스트합니다.
@@ -54,42 +49,20 @@ public class ChatWebSocketController {
     }
 
     /**
-     * @apiNote 메시지 읽음 상태를 업데이트하고, 해당 채팅방의 다른 참여자에게 실시간으로 알립니다.
-     * 1:1 채팅의 경우 상대방이 읽으면 readCount가 줄고, 그룹 채팅은 읽지 않은 사람 수가 줄어듭니다.
+     * @apiNote 메시지 읽음 상태를 업데이트하고, 관련된 모든 클라이언트에게 알립니다.
+     * 모든 로직은 ChatMessageService에 위임됩니다.
      *
-     * @param req 읽음 상태 업데이트 요청 (roomId, readerId, lastReadMessageId)
+     * @param req 읽음 상태 업데이트 요청 (roomId, userId, lastReadMessageId)
      */
-
     @MessageMapping("/chat.markAsRead")
     public void markMessagesAsRead(@Payload MarkAsReadRequest req) {
         try {
-            Long userId = req.userId();
-            chatMessageService.markMessagesAsRead(req.roomId(), userId, req.lastReadMessageId());
+            chatMessageService.processMarkAsRead(req);
 
-            messagingTemplate.convertAndSend(
-                    "/topic/rooms/" + req.roomId() + "/read-status",
-                    new ReadStatusResponse(req.roomId(), userId, req.lastReadMessageId())
-            );
-
-            ChatRoom chatRoom = chatRoomService.getChatRoomById(req.roomId());
-
-            int unreadCount = chatMessageService.countUnreadMessages(req.roomId(),userId);
-
-            ChatRoomSummaryResponse summary = ChatRoomSummaryResponse.from(
-                    chatRoom,
-                    userId,
-                    chatMessageService.getLastMessageContent(req.roomId()),
-                    chatMessageService.getLastMessageTime(req.roomId()),
-                    unreadCount,
-                    imageRepository
-            );
-
-            messagingTemplate.convertAndSend("/topic/user/" + userId + "/rooms", summary);
-
-            log.info("메시지 읽음 처리 성공: roomId={}, readerId={}, lastReadMessageId={}",
-                    req.roomId(), userId, req.lastReadMessageId());
+            log.info("메시지 읽음 처리 요청 성공: roomId={}, userId={}, lastReadMessageId={}",
+                    req.roomId(), req.userId(), req.lastReadMessageId());
         } catch (Exception e) {
-            log.error("메시지 읽음 처리 실패", e);
+            log.error("메시지 읽음 처리 중 에러 발생: {}", req, e);
         }
     }
     /**

@@ -1,10 +1,7 @@
 package core.domain.chat.service;
 
 
-import core.domain.chat.dto.ChatMessageFirstResponse;
-import core.domain.chat.dto.ChatMessageResponse;
-import core.domain.chat.dto.ChatRoomSummaryResponse;
-import core.domain.chat.dto.SendMessageRequest;
+import core.domain.chat.dto.*;
 import core.domain.chat.entity.ChatMessage;
 import core.domain.chat.entity.ChatParticipant;
 import core.domain.chat.entity.ChatRoom;
@@ -48,6 +45,8 @@ public class ChatMessageService {
     private final ApplicationEventPublisher eventPublisher;
 
     private static final int MESSAGE_PAGE_SIZE = 20;
+    private final ChatRoomService chatRoomService;
+
     private record MessagePair(ChatMessage originalMessage, String translatedContent) {}
 
     /**
@@ -377,6 +376,33 @@ public class ChatMessageService {
         chatMessageRepository.delete(message);
         String destination = "/topic/rooms/" + message.getChatRoom().getId();
         messagingTemplate.convertAndSend(destination,payload);
+    }
+
+    @Transactional
+    public void processMarkAsRead(MarkAsReadRequest req) {
+        Long userId = req.userId();
+        Long roomId = req.roomId();
+        Long lastReadMessageId = req.lastReadMessageId();
+
+        this.markMessagesAsRead(roomId, userId, lastReadMessageId);
+
+        messagingTemplate.convertAndSend(
+                "/topic/rooms/" + roomId + "/read-status",
+                new ReadStatusResponse(roomId, userId, lastReadMessageId)
+        );
+
+        ChatRoom chatRoom = chatRoomService.getChatRoomById(roomId);
+        int unreadCount = this.countUnreadMessages(roomId, userId);
+
+        ChatRoomSummaryResponse summary = ChatRoomSummaryResponse.from(
+                chatRoom,
+                userId,
+                this.getLastMessageContent(roomId),
+                this.getLastMessageTime(roomId),
+                unreadCount,
+                imageRepository
+        );
+        messagingTemplate.convertAndSend("/topic/user/" + userId + "/rooms", summary);
     }
     /**
      * @apiNote 메시지 읽음 상태를 업데이트합니다.
