@@ -26,6 +26,7 @@ import java.util.List;
 public class ChatRoomController {
 
     private final ChatRoomService chatService;
+    private final ChatRoomService chatRoomService;
 
     @Operation(summary = "1:1 새로운 채팅방 생성", description = "1:1 채팅방을 생성합니다.")
     @ApiResponses({
@@ -42,11 +43,10 @@ public class ChatRoomController {
     ) {
         CustomUserDetails principal = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Long userId = principal.getUserId();
-        ChatRoom room = chatService.createRoom(userId, request.otherUserId());
-        ChatRoomResponse response = ChatRoomResponse.from(room);
+        ChatRoomResponse response = chatRoomService.createRoom(userId, request.otherUserId());
+
         return ResponseEntity.ok(ApiResponse.success(response));
     }
-
 
     @Operation(summary = "자신의 채팅방 리스트 조회")
     @ApiResponses({

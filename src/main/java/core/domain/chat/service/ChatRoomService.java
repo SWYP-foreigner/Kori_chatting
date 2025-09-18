@@ -1,11 +1,7 @@
 package core.domain.chat.service;
 
 import core.domain.chat.client.UserClient;
-import core.domain.chat.dto.ChatRoomParticipantsResponse;
-import core.domain.chat.dto.ChatRoomSummaryResponse;
-import core.domain.chat.dto.CreateGroupChatRequest;
-import core.domain.chat.dto.UserResponseDto;
-import core.domain.chat.dto.ImageDto;
+import core.domain.chat.dto.*;
 import core.domain.chat.entity.ChatMessage;
 import core.domain.chat.entity.ChatParticipant;
 import core.domain.chat.entity.ChatRoom;
@@ -108,18 +104,28 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public ChatRoom createRoom(Long currentUserId, Long otherUserId) {
-        List<ChatRoom> existingRooms = chatRoomRepo.findOneToOneRoomByParticipantIds(currentUserId,otherUserId);
+    public ChatRoomResponse createRoom(Long currentUserId, Long otherUserId) { // ◀ 반환 타입 변경
+        List<Long> userIds = Arrays.asList(currentUserId, otherUserId);
 
-        if (!existingRooms.isEmpty()) {
-            if (existingRooms.size() > 1) {
-                log.warn("중복된 1:1 채팅방 발견. 사용자 ID: {}, {}. 첫 번째 방을 사용합니다.", currentUserId, otherUserId);
-            }
-            ChatRoom room = existingRooms.get(0);
-            return handleExistingRoom(room, currentUserId);
-        } else {
-            return createNewOneToOneChatRoom(currentUserId, otherUserId);
+        // 1. 기존 로직으로 ChatRoom 엔티티를 찾거나 생성합니다.
+        ChatRoom room;
+        List<ChatRoom> existingRooms  = chatRoomRepo.findOneToOneRoomByParticipantIds(currentUserId, otherUserId);
+        if (existingRooms .size() > 1) {
+            log.warn("중복된 1:1 채팅방이 발견되었습니다. 사용자 ID: {}, {}", currentUserId, otherUserId);
         }
+        if (!existingRooms.isEmpty()) {
+            room = existingRooms .getFirst();
+            handleExistingRoom(room, currentUserId);
+        } else {
+            room = createNewOneToOneChatRoom(currentUserId, otherUserId);
+        }
+
+        List<Long> participantUserIds = room.getParticipants().stream()
+                .map(ChatParticipant::getUserId).toList();
+        Map<Long, UserResponseDto> userInfoMap = userClient.getUsersInfo(participantUserIds).stream()
+                .collect(Collectors.toMap(UserResponseDto::userId, Function.identity()));
+
+        return ChatRoomResponse.from(room, userInfoMap);
     }
 
     private ChatRoom handleExistingRoom(ChatRoom room, Long currentUserId) {

@@ -69,8 +69,8 @@ public class GroupChatService {
         List<Long> userIds = activeParticipants.stream().map(ChatParticipant::getUserId).toList();
         Map<Long, UserResponseDto> userInfoMap = userClient.getUsersInfo(userIds).stream()
                 .collect(Collectors.toMap(UserResponseDto::userId, Function.identity()));
+        UserResponseDto ownerInfo = userInfoMap.getOrDefault(ownerId, UserResponseDto.unknown());
 
-        String ownerImageUrl = userInfoMap.getOrDefault(ownerId, UserResponseDto.unknown()).ImageUrl();
 
         List<String> otherParticipantsImageUrls = activeParticipants.stream()
                 .map(p -> userInfoMap.get(p.getUserId()))
@@ -84,8 +84,8 @@ public class GroupChatService {
                 chatRoom,
                 roomImageUrl,
                 activeParticipants.size(),
-                otherParticipantsImageUrls,
-                ownerImageUrl
+                otherParticipantsImageUrls
+                ,ownerInfo
         );
     }
 
