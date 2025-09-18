@@ -1,16 +1,26 @@
 spring:
   config:
     activate:
-      on-profile: local
+      on-profile: main
+
+  messages:
+    basename: messages
+    encoding: UTF-8
+    fallback-to-system-locale: false   # ★ 이 줄 추가
+  thymeleaf:
+    encoding: UTF-8
+    prefix: classpath:/templates/
+    suffix: .html
+    check-template-location: true
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/${DB_NAME}
+    url: jdbc:postgresql://${DB_DOMAIN}/${DB_NAME}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
   data:
     mongodb:
-      uri: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/${MONGO_INITDB_DATABASE}?authSource=admin
+      uri: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@${MONGO_DOMAIN}:27017/${MONGO_INITDB_DATABASE}?authSource=admin
 
     redis:
       host: ${REDIS_HOST}
@@ -28,7 +38,7 @@ spring:
     show-sql: true
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
 jwt:
   secret: ${JWT_SECRET}
@@ -39,9 +49,10 @@ jwt:
 
 app:
   search:
-    es-url: http://localhost:9200
+    es-url: ${ES_URL}
 main:
   service:
-    url: http://localhost:8080
+    url: ${MAIN_URL}
 server:
   port: 8081
+
