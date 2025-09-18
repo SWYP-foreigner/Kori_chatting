@@ -8,5 +8,5 @@ public record NotificationEvent(
         NotificationType type,
         String message,
         Long referenceId,
-        User sender
+        Long senderId
 ) {}

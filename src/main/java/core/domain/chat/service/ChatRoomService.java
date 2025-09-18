@@ -38,7 +38,6 @@ public class ChatRoomService {
     private final ChatRoomRepository chatRoomRepo;
     private final ChatParticipantRepository participantRepo;
     private final ChatMessageRepository chatMessageRepo;
-    private final ImageRepository imageRepository;
 
     private final ChatMessageService chatMessageService;
 

@@ -35,8 +35,10 @@ public class ChatMessageController {
     @GetMapping("/rooms/{roomId}/messages")
     public ResponseEntity<ApiResponse<List<ChatMessageResponse>>> getMessages(
             @PathVariable Long roomId,
-            @RequestParam(required = false) Long lastMessageId
+            @RequestParam(required = false) String lastMessageId
     ) {
+        if(lastMessageId=="undefined")
+            lastMessageId=null;
         CustomUserDetails principal = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Long userId = principal.getUserId();
         List<ChatMessageResponse> responses = chatService.getMessages(roomId, userId, lastMessageId);

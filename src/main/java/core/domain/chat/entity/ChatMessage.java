@@ -14,7 +14,7 @@ import java.time.Instant;
 public class ChatMessage {
 
     @Id
-    private String id; // MongoDB의 _id는 일반적으로 String 타입
+    private String id;
 
     @Field("room_id")
     private Long chatRoomId;
@@ -37,5 +37,11 @@ public class ChatMessage {
         this.content = content;
         this.sentAt = Instant.now();
         this.readCount = readCount;
+    }
+    public ChatMessage(Long chatRoomId, Long senderId, String content) {
+        this.chatRoomId = chatRoomId;
+        this.senderId = senderId;
+        this.content = content;
+        this.sentAt = Instant.now();
     }
 }

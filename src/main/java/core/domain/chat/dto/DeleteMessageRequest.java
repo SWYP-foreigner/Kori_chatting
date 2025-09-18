@@ -1,6 +1,6 @@
 package core.domain.chat.dto;
 
 public record DeleteMessageRequest(
-        Long messageId,
+        String messageId,
         Long senderId
 ) {}

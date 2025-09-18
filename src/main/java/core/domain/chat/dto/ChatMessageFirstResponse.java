@@ -4,38 +4,35 @@ import core.domain.chat.entity.ChatMessage;
 import core.domain.chat.entity.ChatRoom;
 import core.domain.user.entity.User;
 import core.global.enums.ImageType;
-import core.global.image.entity.Image;
-import core.global.image.repository.ImageRepository;
+
 
 import java.time.Instant;
-
 public record ChatMessageFirstResponse(
-        Long id,
+        String id,
         Long roomId,
         Long senderId,
+        String content,
+        Instant sentAt,
         String senderFirstName,
         String senderLastName,
-        String senderImageUrl,
-        String content,
-        Instant sentAt
+        String senderImageUrl
 ) {
-    public static ChatMessageFirstResponse fromEntity(ChatMessage message, ChatRoom room, ImageRepository imageRepository) {
-        User sender = message.getSender();
-        String senderImageUrl;
-        senderImageUrl = imageRepository.findFirstByImageTypeAndRelatedIdOrderByOrderIndexAsc(ImageType.USER, sender.getId())
-                .map(Image::getUrl)
-                .orElse(null);
-
-
+    /**
+     * [리팩토링 후]
+     * 이 팩토리 메서드는 순수 데이터 객체인 ChatMessage와 UserResponseDto만 받아서
+     * 최종 DTO를 조립하는 역할만 수행합니다.
+     * 더 이상 데이터베이스에 접근하지 않습니다.
+     */
+    public static ChatMessageFirstResponse from(ChatMessage message, UserResponseDto sender) {
         return new ChatMessageFirstResponse(
                 message.getId(),
-                message.getChatRoom().getId(),
-                sender.getId(),
-                sender.getFirstName(),
-                sender.getLastName(),
-                senderImageUrl,
+                message.getChatRoomId(),
+                sender.userId(),
                 message.getContent(),
-                message.getSentAt()
+                message.getSentAt(),
+                sender.firstName(),
+                sender.lastName(),
+                sender.ImageUrl()
         );
     }
 }

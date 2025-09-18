@@ -78,6 +78,8 @@ public enum ErrorCode {
     CHAT_NOT_GROUP(HttpStatus.UNAUTHORIZED, "현재의 채팅방은 그룹채팅방이 아닙니다"),
     ALREADY_CHAT_PARTICIPANT(HttpStatus.UNAUTHORIZED, "이미 현재의 그룹채팅방에 참여하고 있습니다."),
     NOT_CHAT_PARTICIPANT(HttpStatus.UNAUTHORIZED, "유저는 현재 채팅방에 참여하고 있지 않습니다."),
+    INVALID_USER_DELETE_MESSAGE(HttpStatus.UNAUTHORIZED, "메세지를 보낸 유저가 아닙니다."),
+
 
     JWT_TOKEN_NOT_FOUND(HttpStatus.UNAUTHORIZED, "인증 정보(JWT)가 필요합니다."),
     JWT_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "액세스 토큰이 만료되었습니다."),

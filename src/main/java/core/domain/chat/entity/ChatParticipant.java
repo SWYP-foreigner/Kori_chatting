@@ -10,14 +10,15 @@ import java.time.Instant;
 @Entity
 @Table(name = "chat_participant",
         uniqueConstraints = {
-                // user_id로 변경
                 @UniqueConstraint(columnNames = {"chatroom_id", "user_id"})
         }
 )
 @Getter
 @NoArgsConstructor
 public class ChatParticipant {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ChatParticipant_id")
     private Long id;
 
@@ -31,8 +32,8 @@ public class ChatParticipant {
     @Column(name = "joined_at", updatable = false)
     private Instant joinedAt;
 
-    @Column(name = "last_read_at")
-    private Instant lastReadAt;
+    @Column(name = "last_read_message_id")
+    private String lastReadMessageId;
 
     @Enumerated(EnumType.STRING)
     private ChatParticipantStatus status;
@@ -48,11 +49,11 @@ public class ChatParticipant {
         this.userId = userId;
         this.status = ChatParticipantStatus.ACTIVE;
         this.joinedAt = Instant.now();
-        this.lastReadAt = Instant.now(); // 처음엔 현재 시간으로 초기화
+        this.lastReadMessageId = null;
     }
 
-    public void updateLastReadAt() {
-        this.lastReadAt = Instant.now();
+    public void updateLastReadMessageId(String messageId) {
+        this.lastReadMessageId = messageId;
     }
 
     public void toggleTranslation(boolean enabled) {
