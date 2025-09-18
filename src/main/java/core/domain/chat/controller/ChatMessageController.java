@@ -76,7 +76,7 @@ public class ChatMessageController {
     @GetMapping("/rooms/{roomId}/messages/around")
     public ResponseEntity<ApiResponse<List<ChatMessageResponse>>> getMessagesAround(
             @PathVariable Long roomId,
-            @RequestParam Long messageId
+            @RequestParam String messageId
     ) {
         CustomUserDetails principal = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Long userId = principal.getUserId();

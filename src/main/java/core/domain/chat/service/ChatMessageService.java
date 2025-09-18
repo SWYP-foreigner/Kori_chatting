@@ -521,5 +521,68 @@ public class ChatMessageService {
     private Optional<ChatMessage> getLastMessage(Long roomId) {
         return chatMessageRepository.findTopByChatRoomIdOrderBySentAtDesc(roomId);
     }
+    /**
+     * 특정 메시지를 중심으로 이전/이후 메시지 20개씩을 함께 조회합니다.
+     *
+     * @apiNote 이 메서드는 다음과 같은 순서로 동작합니다.
+     * 1. 사용자의 번역 설정 정보를 API로 조회합니다.
+     * 2. MongoDB에서 이전/타겟/이후 메시지 덩어리를 각각 조회하여 합칩니다.
+     * 3. 합쳐진 모든 메시지의 발신자(sender) ID를 수집합니다.
+     * 4. Main Service에 Bulk API를 한 번 호출하여 모든 발신자의 상세 정보를 일괄 조회합니다.
+     * 5. 필요한 경우, 메시지 내용을 일괄 번역합니다.
+     * 6. 모든 정보를 조합하여 최종 응답 DTO 목록을 생성합니다.
+     *
+     * @param roomId          채팅방 ID
+     * @param userId          요청한 사용자 ID
+     * @param targetMessageId 기준점이 될 메시지의 ID (String 타입)
+     * @return List<ChatMessageResponse> 메시지 목록
+     * @throws BusinessException 채팅방 참여자가 아니거나 메시지를 찾을 수 없을 때 발생
+     */
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getMessagesAround(Long roomId, Long userId, String targetMessageId) {
+        UserResponseDto currentUserInfo = userClient.getUserProfile(userId);
+        boolean needsTranslation = currentUserInfo.translateLanguage() != null && !currentUserInfo.translateLanguage().isEmpty();
 
+        List<ChatMessage> olderMessages = chatMessageRepository.findTop20ByChatRoomIdAndIdLessThanOrderByIdDesc(roomId, targetMessageId);
+        Collections.reverse(olderMessages);
+
+        ChatMessage targetMessage = chatMessageRepository.findById(targetMessageId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_MESSAGE_NOT_FOUND));
+
+        List<ChatMessage> newerMessages = chatMessageRepository.findTop20ByChatRoomIdAndIdGreaterThanOrderByIdAsc(roomId, targetMessageId);
+
+        List<ChatMessage> combinedMessages = new ArrayList<>();
+        combinedMessages.addAll(olderMessages);
+        combinedMessages.add(targetMessage);
+        combinedMessages.addAll(newerMessages);
+
+        if (combinedMessages.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> senderIds = combinedMessages.stream().map(ChatMessage::getSenderId).distinct().toList();
+        Map<Long, UserResponseDto> senderInfoMap = userClient.getUsersInfo(senderIds).stream()
+                .collect(Collectors.toMap(UserResponseDto::userId, Function.identity()));
+
+        List<String> translatedContents = null;
+        if (needsTranslation) {
+            List<String> originalContents = combinedMessages.stream().map(ChatMessage::getContent).toList();
+            translatedContents = translationService.translateMessages(originalContents, currentUserInfo.translateLanguage());
+        }
+
+        final List<String> finalTranslatedContents = translatedContents;
+        return IntStream.range(0, combinedMessages.size())
+                .mapToObj(i -> {
+                    ChatMessage message = combinedMessages.get(i);
+                    UserResponseDto sender = senderInfoMap.getOrDefault(message.getSenderId(), UserResponseDto.unknown());
+                    String translatedContent = (finalTranslatedContents != null) ? finalTranslatedContents.get(i) : null;
+
+                    return new ChatMessageResponse(
+                            message.getId(), message.getChatRoomId(), sender.userId(),
+                            message.getContent(), translatedContent, message.getSentAt(),
+                            sender.firstName(), sender.lastName(), sender.ImageUrl()
+                    );
+                })
+                .toList();
+    }
 }

@@ -47,16 +47,6 @@ public class ChatRoomController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @Operation(summary = "그룹 채팅방 생성")
-    @PostMapping("/group")
-    public ResponseEntity<ApiResponse<Void>> createGroupChat(
-            @Valid @RequestBody CreateGroupChatRequest request
-    ) {
-        CustomUserDetails principal = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        Long userId = principal.getUserId();
-        chatService.createGroupChatRoom(userId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(null));
-    }
 
     @Operation(summary = "자신의 채팅방 리스트 조회")
     @ApiResponses({

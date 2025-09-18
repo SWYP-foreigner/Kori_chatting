@@ -2,6 +2,7 @@ package core.domain.chat.repository;
 
 import core.domain.chat.entity.ChatRoom;
 import core.global.enums.ChatParticipantStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,10 +20,8 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
 
     List<ChatRoom> findTop10ByGroupTrueOrderByCreatedAtDesc();
 
-    @Query("SELECT cr FROM ChatRoom cr " +
-            "WHERE cr.group = true " +
-            "ORDER BY SIZE(cr.participants) DESC")
-    List<ChatRoom> findTopByGroupTrueOrderByParticipantCountDesc(int limit);
+    @Query("SELECT cr FROM ChatRoom cr WHERE cr.group = true ORDER BY SIZE(cr.participants) DESC")
+    List<ChatRoom> findPopularGroupChats(Pageable pageable);
 
     List<ChatRoom> findTop10ByGroupTrueAndIdLessThanOrderByCreatedAtDesc(Long id);
     /**
@@ -39,21 +38,6 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
             "AND (SELECT COUNT(p) FROM ChatParticipant p WHERE p.chatRoom = cr) = 2")
     List<ChatRoom>  findOneToOneRoomByParticipantIds(@Param("userId1") Long userId1, @Param("userId2") Long userId2);
 
-    /**
-     * 특정 사용자가 'ACTIVE' 상태로 참여하고 있는 모든 채팅방 목록을 조회합니다.
-     * N+1 문제를 방지하기 위해 참가자(participants) 정보까지 한 번의 쿼리로 함께 가져옵니다.
-     *
-     * @param userId 조회할 사용자의 ID
-     * @param status 조회할 참가자의 상태 (예: ChatParticipantStatus.ACTIVE)
-     * @return ChatRoom 리스트
-     */
-    @Query("SELECT DISTINCT cr FROM ChatRoom cr " +
-            "JOIN FETCH cr.participants p " +
-            "WHERE p.userId = :userId AND p.status = :status")
-    List<ChatRoom> findActiveChatRoomsWithParticipantsByUserId(
-            @Param("userId") Long userId,
-            @Param("status") ChatParticipantStatus status
-    );
 
     /**
      * [추가된 메서드]

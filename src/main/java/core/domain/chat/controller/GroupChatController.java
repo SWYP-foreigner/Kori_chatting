@@ -1,6 +1,7 @@
 package core.domain.chat.controller;
 
 
+import core.domain.chat.dto.CreateGroupChatRequest;
 import core.domain.chat.dto.GroupChatDetailResponse;
 import core.domain.chat.dto.GroupChatMainResponse;
 import core.domain.chat.dto.GroupChatSearchResponse;
@@ -10,7 +11,9 @@ import core.global.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -67,5 +70,16 @@ public class GroupChatController {
     public ResponseEntity<ApiResponse<List<GroupChatMainResponse>>> getPopularGroupChats() {
         List<GroupChatMainResponse> response = chatService.getPopularGroupChats(10);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @Operation(summary = "그룹 채팅방 생성")
+    @PostMapping("/group")
+    public ResponseEntity<ApiResponse<Void>> createGroupChat(
+            @Valid @RequestBody CreateGroupChatRequest request
+    ) {
+        CustomUserDetails principal = (CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long userId = principal.getUserId();
+        chatService.createGroupChatRoom(userId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(null));
     }
 }

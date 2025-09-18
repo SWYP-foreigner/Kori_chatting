@@ -65,6 +65,16 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
      */
     Optional<ChatMessage> findTopByChatRoomIdOrderBySentAtDesc(Long chatRoomId);
     void deleteByChatRoomId(Long chatRoomId);
+
+    /**
+     * [추가] 특정 메시지 ID보다 오래된 메시지를 최신순으로 20개 조회합니다.
+     */
+    List<ChatMessage> findTop20ByChatRoomIdAndIdLessThanOrderByIdDesc(Long chatRoomId, String targetMessageId);
+
+    /**
+     * [추가] 특정 메시지 ID보다 최신 메시지를 순서대로 20개 조회합니다.
+     */
+    List<ChatMessage> findTop20ByChatRoomIdAndIdGreaterThanOrderByIdAsc(Long chatRoomId, String targetMessageId);
 }
 
 
