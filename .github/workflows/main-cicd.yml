@@ -20,7 +20,7 @@ jobs:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           # A가 사용하는 필수 인프라
           PROD_REDIS_HOST: ${{ secrets.PROD_REDIS_HOST }}
-          PROD_REDIS_PORT: ${{ secrets.REDIS_PORT }}
+          PROD_REDIS_PORT: ${{ secrets.PROD_REDIS_PORT }}
           PROD_REDIS_PASSWORD: ${{ secrets.PROD_REDIS_PASSWORD }}
           MONGODB_ATLAS_URI: ${{ secrets.MONGODB_ATLAS_URI }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
