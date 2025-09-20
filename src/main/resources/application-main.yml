@@ -37,3 +37,6 @@ main:
     url: http://localhost:8080
 server:
   port: 8081
+
+swagger:
+  server-url: ${SERVER_URL}

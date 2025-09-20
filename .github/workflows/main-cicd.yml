@@ -29,7 +29,7 @@ jobs:
           req(){ [ -n "${!1:-}" ] || (echo "::error::$1 is empty" && exit 1); }
           for v in DOCKERHUB_USERNAME DOCKERHUB_TOKEN \
                    PROD_REDIS_HOST PROD_REDIS_PORT PROD_REDIS_PASSWORD \
-                   MONGODB_ATLAS_URI JWT_SECRET; do req "$v"; done
+                   MONGODB_ATLAS_URI JWT_SECRET SERVER_URL; do req "$v"; done
           echo "preflight ok"
 
   build:
@@ -79,6 +79,7 @@ jobs:
 
       # 앱 공통
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SERVER_URL: ${{ secrets.SERVER_URL }}
 
       # (있으면) OAuth/외부 키들 — 필요 없는 항목은 비워둬도 무방
 
@@ -118,6 +119,7 @@ jobs:
 
           # App
           JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_SECRET=${{ secrets.SERVER_URL }}
 
           # Optional creds
 
