@@ -1,0 +1,173 @@
+name: Deploy Chat/Alerts (A via systemd)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-a-main
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required secrets
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          # A가 사용하는 필수 인프라
+          PROD_REDIS_HOST: ${{ secrets.PROD_REDIS_HOST }}
+          PROD_REDIS_PORT: ${{ secrets.REDIS_PORT }}
+          PROD_REDIS_PASSWORD: ${{ secrets.PROD_REDIS_PASSWORD }}
+          MONGODB_ATLAS_URI: ${{ secrets.MONGODB_ATLAS_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          set -euo pipefail
+          req(){ [ -n "${!1:-}" ] || (echo "::error::$1 is empty" && exit 1); }
+          for v in DOCKERHUB_USERNAME DOCKERHUB_TOKEN \
+                   PROD_REDIS_HOST PROD_REDIS_PORT PROD_REDIS_PASSWORD \
+                   MONGODB_ATLAS_URI JWT_SECRET PROD_SERVER_URL; do req "$v"; done
+          echo "preflight ok"
+
+  build:
+    needs: preflight
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/foreigner-a:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/foreigner-a:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/foreigner-a:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/foreigner-a:buildcache,mode=max
+
+      - name: Export image meta
+        id: meta
+        run: |
+          echo "image=${{ secrets.DOCKERHUB_USERNAME }}/foreigner-a:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy:
+    needs: build
+    runs-on: [ self-hosted, prod, A ]   # A 서버 러너 라벨
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      IMAGE: ${{ needs.build.outputs.image }}
+
+      # 필수 인프라
+      SPRING_DATA_REDIS_HOST: ${{ secrets.PROD_REDIS_HOST }}
+      SPRING_DATA_REDIS_PORT: ${{ secrets.PROD_REDIS_PORT }}
+      SPRING_DATA_REDIS_PASSWORD: ${{ secrets.PROD_REDIS_PASSWORD }}
+      SPRING_DATA_MONGODB_URI: ${{ secrets.MONGODB_ATLAS_URI }}
+
+      # 앱 공통
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      SERVER_URL: ${{ secrets.PROD_SERVER_URL }}
+
+      # (있으면) OAuth/외부 키들 — 필요 없는 항목은 비워둬도 무방
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy locally on A
+        shell: bash
+        env:
+          IMAGE_FROM_BUILD: ${{ needs.build.outputs.image }}
+          SHA_FROM_BUILD: ${{ needs.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "IMAGE from build(raw): '${IMAGE_FROM_BUILD}'"
+          if [ -n "${IMAGE_FROM_BUILD:-}" ]; then
+            IMAGE_EFF="$IMAGE_FROM_BUILD"
+          else
+            IMAGE_EFF="${DOCKERHUB_USERNAME}/foreigner-a:${SHA_FROM_BUILD:-$GITHUB_SHA}"
+          fi
+          echo "IMAGE effective: ${IMAGE_EFF}"
+
+          command -v docker >/dev/null || { echo "::error::docker not found"; exit 1; }
+          echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+          # 1) env 파일
+          sudo mkdir -p /etc/foreigner-a
+          sudo bash -c "printf 'IMAGE=%s\n' \"$IMAGE_EFF\" > /etc/foreigner-a/app.env"
+          sudo tee -a /etc/foreigner-a/app.env > /dev/null <<'EOF'
+
+          # Redis
+          SPRING_DATA_REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
+          SPRING_DATA_REDIS_PORT=${{ secrets.REDIS_PORT }}
+          SPRING_DATA_REDIS_PASSWORD=${{ secrets.PROD_REDIS_PASSWORD }}
+
+          # Mongo (A는 필수)
+          SPRING_DATA_MONGODB_URI=${{ secrets.MONGODB_ATLAS_URI }}
+
+          # App
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+          # Optional creds
+
+
+          SPRING_PROFILES_ACTIVE=prod
+          JAVA_TOOL_OPTIONS=-Xms512m -Xmx1024m
+
+          # A는 B와 포트를 분리 (예: A=8081, B=8080)
+          APP_PORT=8081
+          EOF
+
+          sudo chgrp docker /etc/foreigner-a/app.env 2>/dev/null || true
+          sudo chmod 640 /etc/foreigner-a/app.env
+
+          # 2) systemd 유닛
+          sudo bash -c 'cat > /etc/systemd/system/foreigner-a.service' <<'EOF'
+          [Unit]
+          Description=Foreigner Chat/Alerts (A) App (Docker)
+          After=docker.service network-online.target
+          Wants=network-online.target docker.service
+
+          [Service]
+          EnvironmentFile=/etc/foreigner-a/app.env
+          Restart=always
+          TimeoutStartSec=0
+          ExecStartPre=-/usr/bin/docker rm -f foreigner-a
+          ExecStartPre=/usr/bin/docker pull ${IMAGE}
+          ExecStart=/usr/bin/docker run --name foreigner-a \
+            -p ${APP_PORT}:8080 \
+            --env-file /etc/foreigner-a/app.env \
+            --restart always \
+            ${IMAGE}
+          ExecStop=/usr/bin/docker stop foreigner-a
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable foreigner-a || true
+          sudo systemctl restart foreigner-a
+
+          # 3) 헬스체크 (A의 엔드포인트가 다르면 여기 수정)
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8081/actuator/health | grep -q '"status":"UP"'; then
+              echo "Health: UP"; exit 0
+            fi
+            echo "Waiting health... ($i/30)"; sleep 2
+          done
+          echo "Health check failed"
+          journalctl -u foreigner-a --no-pager -n 200
+          exit 1

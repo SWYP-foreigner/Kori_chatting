@@ -5,15 +5,43 @@ spring:
 
   datasource:
     url: jdbc:postgresql://localhost:5432/${DB_NAME}
-    username: ${DB_USERNAME}
+    username: ${DB_USER}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/${MONGO_INITDB_DATABASE}?authSource=admin
+
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      key:
+        prefix:
+          refreshToken: "refreshToken:"
+          blacklist: "blacklist:"
+          accessToken: "access_token"
 
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiration: 10080
+  refresh-expiration: 10080
+
+
+
+app:
+  search:
+    es-url: http://localhost:9200
+main:
+  service:
+    url: http://localhost:8080
+server:
+  port: 8081
