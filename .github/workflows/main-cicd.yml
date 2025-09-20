@@ -24,7 +24,6 @@ jobs:
           PROD_REDIS_PASSWORD: ${{ secrets.PROD_REDIS_PASSWORD }}
           MONGODB_ATLAS_URI: ${{ secrets.MONGODB_ATLAS_URI }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          PROD_SERVER_URL: ${{ secrets.PROD_SERVER_URL }}
         run: |
           set -euo pipefail
           req(){ [ -n "${!1:-}" ] || (echo "::error::$1 is empty" && exit 1); }
@@ -83,18 +82,7 @@ jobs:
       SERVER_URL: ${{ secrets.PROD_SERVER_URL }}
 
       # (있으면) OAuth/외부 키들 — 필요 없는 항목은 비워둬도 무방
-      WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
-      WEB_CLIENT_SECRET: ${{ secrets.WEB_CLIENT_SECRET }}
-      WEB_REDIRECT_URI: ${{ secrets.WEB_REDIRECT_URI }}
-      NCP_ACCESS_KEY: ${{ secrets.NCP_ACCESS_KEY }}
-      NCP_SECRET_KEY: ${{ secrets.NCP_SECRET_KEY }}
-      NCP_BUCKET_NAME: ${{ secrets.NCP_BUCKET_NAME }}
-      FEIGN_CONNECT_TIMEOUT: ${{ secrets.FEIGN_CONNECT_TIMEOUT }}
-      FEIGN_READ_TIMEOUT: ${{ secrets.FEIGN_READ_TIMEOUT }}
-      FEIGN_LOGGER_LEVEL: ${{ secrets.FEIGN_LOGGER_LEVEL }}
-      NAVER_HOST: ${{ secrets.NAVER_HOST }}
-      APP_NAME: ${{ secrets.APP_NAME }}
-      BASE_URL: ${{ secrets.BASE_URL }}
+
     steps:
       - uses: actions/checkout@v4
       - name: Deploy locally on A
@@ -131,21 +119,9 @@ jobs:
 
           # App
           JWT_SECRET=${{ secrets.JWT_SECRET }}
-          SERVER_URL=${{ secrets.PROD_SERVER_URL }}
 
           # Optional creds
-          WEB_CLIENT_ID=${{ secrets.WEB_CLIENT_ID }}
-          WEB_CLIENT_SECRET=${{ secrets.WEB_CLIENT_SECRET }}
-          WEB_REDIRECT_URI=${{ secrets.WEB_REDIRECT_URI }}
-          NCP_ACCESS_KEY=${{ secrets.NCP_ACCESS_KEY }}
-          NCP_SECRET_KEY=${{ secrets.NCP_SECRET_KEY }}
-          NCP_BUCKET_NAME=${{ secrets.NCP_BUCKET_NAME }}
-          FEIGN_CONNECT_TIMEOUT=${{ secrets.FEIGN_CONNECT_TIMEOUT }}
-          FEIGN_READ_TIMEOUT=${{ secrets.FEIGN_READ_TIMEOUT }}
-          FEIGN_LOGGER_LEVEL=${{ secrets.FEIGN_LOGGER_LEVEL }}
-          NAVER_HOST=${{ secrets.NAVER_HOST }}
-          APP_NAME=${{ secrets.APP_NAME }}
-          BASE_URL=${{ secrets.BASE_URL }}
+
 
           SPRING_PROFILES_ACTIVE=prod
           JAVA_TOOL_OPTIONS=-Xms512m -Xmx1024m
