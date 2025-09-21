@@ -1,4 +1,8 @@
 spring:
+  config:
+    activate:
+      on-profile: main
+
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -40,3 +44,8 @@ server:
 
 swagger:
   server-url: ${SERVER_URL}
+
+google:
+  cloud:
+    project:
+      id: ${GCP_PROJECT_ID}
