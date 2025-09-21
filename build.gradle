@@ -44,9 +44,6 @@ dependencies {
 	implementation 'io.github.openfeign.form:feign-form-spring:3.8.0'
 
 	// --- JWT (권장: jackson 모듈 포함) ---
-	implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9"
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
 	runtimeOnly   'io.jsonwebtoken:jjwt-impl:0.11.5'
@@ -68,24 +65,15 @@ dependencies {
 
 	annotationProcessor "org.springframework.boot:spring-boot-configuration-processor"
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 	testImplementation 'org.mockito:mockito-inline:5.2.0'
 	testImplementation "org.junit.jupiter:junit-jupiter:5.10.3"
 	implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-	implementation 'software.amazon.awssdk:s3:2.25.39'
-
-	implementation 'software.amazon.awssdk:auth:2.25.39'
-	implementation 'software.amazon.awssdk:regions:2.25.39'
 
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 
 	implementation 'com.google.cloud:google-cloud-translate:2.38.0'
 	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
-    implementation 'org.springframework.boot:spring-boot-starter-mail'
 
-	implementation 'org.springframework.data:spring-data-elasticsearch:5.3.0'
-	implementation 'co.elastic.clients:elasticsearch-java:8.14.0'
-	implementation 'org.elasticsearch.client:elasticsearch-rest-client:8.14.0'
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
 
 }
