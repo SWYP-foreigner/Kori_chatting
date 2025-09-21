@@ -172,7 +172,7 @@ jobs:
           ExecStartPre=-/usr/bin/docker rm -f foreigner-a
           ExecStartPre=/usr/bin/docker pull ${IMAGE}
           ExecStart=/usr/bin/docker run --name foreigner-a \
-            -p $APP_PORT:$A_SERVER_PORT \
+            -p ${APP_PORT}:${APP_PORT} \
             --env-file /etc/foreigner-a/app.env \
             --restart always \
             ${IMAGE}
