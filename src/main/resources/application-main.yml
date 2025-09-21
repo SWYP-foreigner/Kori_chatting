@@ -7,7 +7,7 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/${MONGO_INITDB_DATABASE}?authSource=admin
+      uri: ${MONGODB_ATLAS_URI}
 
     redis:
       host: ${SPRING_DATA_REDIS_HOST}
@@ -29,8 +29,8 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 jwt:
   secret: ${JWT_SECRET}
-  access-expiration: 10080
-  refresh-expiration: 10080
+  access-expiration: ${JWT_ACCESS_EXPIRATION}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION}
 
 main:
   service:

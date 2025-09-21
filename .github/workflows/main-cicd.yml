@@ -83,6 +83,8 @@ jobs:
 
       MAIN_SERVICE_URL: ${{secrets.MAIN_SERVICE_URL}}
       B_SERVER_PORT: ${{secrets.B_SERVER_PORT}}
+      JWT_ACCESS_EXPIRATION: ${{ secrets.JWT_ACCESS_EXPIRATION}}
+      JWT_REFRESH_EXPIRATION: ${{ secrets.JWT_REFRESH_EXPIRATION}}
 
     steps:
       - uses: actions/checkout@v4
@@ -121,6 +123,8 @@ jobs:
           # App
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           SERVER_URL=${{ secrets.SERVER_URL }}
+          JWT_ACCESS_EXPIRATION=${{ secrets.JWT_ACCESS_EXPIRATION}}
+          JWT_REFRESH_EXPIRATION=${{ secrets.JWT_REFRESH_EXPIRATION}}
 
           # Optional creds
           MAIN_SERVICE_URL=${{secrets.MAIN_SERVICE_URL}}
