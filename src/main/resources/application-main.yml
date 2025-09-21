@@ -15,9 +15,9 @@ spring:
       password: ${SPRING_DATA_REDIS_PASSWORD}
       key:
         prefix:
-          refreshToken: "refreshToken:"
-          blacklist: "blacklist:"
-          accessToken: "access_token"
+          refreshToken: ${SPRING_DATA_REDIS_KEY_PREFIX_REFRESHTOKEN}
+          blacklist: ${SPRING_DATA_REDIS_KEY_PREFIX_BLACKLIST}
+          accessToken: ${SPRING_DATA_REDIS_KEY_PREFIX_ACCESSTOKEN}
 
   jpa:
     hibernate:
