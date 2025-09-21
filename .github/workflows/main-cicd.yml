@@ -72,6 +72,10 @@ jobs:
       IMAGE: ${{ needs.build.outputs.image }}
 
       # 필수 인프라
+      SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+      SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+      SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+
       SPRING_DATA_REDIS_HOST: ${{ secrets.PROD_REDIS_HOST }}
       SPRING_DATA_REDIS_PORT: ${{ secrets.PROD_REDIS_PORT }}
       SPRING_DATA_REDIS_PASSWORD: ${{ secrets.PROD_REDIS_PASSWORD }}
@@ -114,6 +118,11 @@ jobs:
           sudo mkdir -p /etc/foreigner-a
           sudo bash -c "printf 'IMAGE=%s\n' \"$IMAGE_EFF\" > /etc/foreigner-a/app.env"
           sudo tee -a /etc/foreigner-a/app.env > /dev/null <<'EOF'
+
+          # Postgres
+          SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}
 
           # Redis
           SPRING_DATA_REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
