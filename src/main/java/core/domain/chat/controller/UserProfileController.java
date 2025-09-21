@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "채팅 유저 API", description = "채팅 내 유저 프로필 조회, 차단 등 관련 API")
 @RestController
-@RequestMapping("/api/v1/chat/users")
+@RequestMapping("/chat/v1/users")
 @RequiredArgsConstructor
 public class UserProfileController {
 

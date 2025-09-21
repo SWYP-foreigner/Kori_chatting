@@ -20,7 +20,7 @@ import java.util.List;
 
 @Tag(name = "채팅 메시지 API", description = "채팅 메시지 조회, 검색, 읽음 처리 등 관련 API")
 @RestController
-@RequestMapping("/api/v1/chat")
+@RequestMapping("/chat/v1")
 @RequiredArgsConstructor
 public class ChatMessageController {
 

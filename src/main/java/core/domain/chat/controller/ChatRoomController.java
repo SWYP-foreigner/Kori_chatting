@@ -21,7 +21,7 @@ import java.util.List;
 
 @Tag(name = "채팅방 API", description = "채팅방 생성, 조회, 참여자 관리 등 채팅방 관련 API")
 @RestController
-@RequestMapping("/api/v1/chat/rooms")
+@RequestMapping("/chat/v1/rooms")
 @RequiredArgsConstructor
 public class ChatRoomController {
 

@@ -22,7 +22,7 @@ import java.util.List;
 
 @Tag(name = "그룹 채팅 API", description = "그룹 채팅 참여, 검색, 조회 등 그룹 채팅 관련 API")
 @RestController
-@RequestMapping("/api/v1/chat")
+@RequestMapping("/chat/v1")
 @RequiredArgsConstructor
 public class GroupChatController {
 
