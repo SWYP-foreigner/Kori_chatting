@@ -34,9 +34,9 @@ jwt:
 
 main:
   service:
-    url: http://localhost:8080
+    url: ${MAIN_SERVICE_URL}
 server:
-  port: 8081
+  port: ${A_SERVER_PORT}
 
 swagger:
   server-url: ${SERVER_URL}
