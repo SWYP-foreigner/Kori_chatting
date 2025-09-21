@@ -34,7 +34,6 @@ public class ChatRoomService {
     private final ChatMessageRepository chatMessageRepo;
     private final UserClient userClient;
 
-    private final ChatMessageService chatMessageService;
     private final ChatRoomRepository chatRoomRepository;
 
     private record ChatRoomWithTime(ChatRoom room, Instant lastMessageTime) {}
@@ -73,9 +72,9 @@ public class ChatRoomService {
 
         return rooms.stream()
                 .map(room -> {
-                    String lastMessageContent = chatMessageService.getLastMessageContent(room.getId());
-                    Instant lastMessageTime = chatMessageService.getLastMessageTime(room.getId());
-                    int unreadCount = chatMessageService.countUnreadMessages(room.getId(), userId);
+                    String lastMessageContent = getLastMessageContent(room.getId());
+                    Instant lastMessageTime   = getLastMessageTime(room.getId());
+                    int unreadCount           = countUnreadMessages(room.getId(), userId);
                     String roomName;
                     String roomImageUrl;
 
@@ -262,9 +261,9 @@ public class ChatRoomService {
 
         return allActiveRooms.stream()
                 .map(room -> {
-                    String lastMessageContent = chatMessageService.getLastMessageContent(room.getId());
-                    Instant lastMessageTime = chatMessageService.getLastMessageTime(room.getId());
-                    int unreadCount = chatMessageService.countUnreadMessages(room.getId(), userId);
+                    String lastMessageContent = getLastMessageContent(room.getId());
+                    Instant lastMessageTime   = getLastMessageTime(room.getId());
+                    int unreadCount           = countUnreadMessages(room.getId(), userId);
                     String calculatedRoomName;
                     String roomImageUrl;
 
@@ -300,4 +299,33 @@ public class ChatRoomService {
         return chatRoomRepository.findByIdWithParticipants(roomId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
     }
+
+
+    // 마지막 메시지 내용
+    private String getLastMessageContent(Long roomId) {
+        return chatMessageRepo.findTopByChatRoomIdOrderBySentAtDesc(roomId)
+                .map(ChatMessage::getContent)
+                .orElse(null);
+    }
+
+    // 마지막 메시지 시간
+    private Instant getLastMessageTime(Long roomId) {
+        return chatMessageRepo.findTopByChatRoomIdOrderBySentAtDesc(roomId)
+                .map(ChatMessage::getSentAt)
+                .orElse(null);
+    }
+
+    // 특정 사용자의 미읽음 개수
+    private int countUnreadMessages(Long roomId, Long userId) {
+        String lastReadId = chatParticipantRepository.findByChatRoomIdAndUserId(roomId, userId)
+                .map(ChatParticipant::getLastReadMessageId)
+                .orElse(null);
+
+        if (lastReadId == null) {
+            return chatMessageRepo.countByChatRoomIdAndSenderIdNot(roomId, userId);
+        } else {
+            return chatMessageRepo.countByChatRoomIdAndIdGreaterThanAndSenderIdNot(roomId, lastReadId, userId);
+        }
+    }
+
 }

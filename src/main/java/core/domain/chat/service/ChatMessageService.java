@@ -46,7 +46,6 @@ public class ChatMessageService {
     private final UserClient userClient;
 
     private static final int MESSAGE_PAGE_SIZE = 20;
-    private final ChatRoomService chatRoomService;
 
     private record MessagePair(ChatMessage originalMessage, String translatedContent) {}
 
@@ -404,7 +403,8 @@ public class ChatMessageService {
                 new ReadStatusResponse(roomId, userId, lastReadMessageId)
         );
 
-        ChatRoom chatRoom = chatRoomService.getChatRoomById(roomId);
+        ChatRoom chatRoom = chatRoomRepo.findByIdWithParticipants(roomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_ROOM_NOT_FOUND));
         List<ChatParticipant> participants = chatRoom.getParticipants();
         if (participants.isEmpty()) return;
 
