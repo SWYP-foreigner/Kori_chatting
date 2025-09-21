@@ -81,7 +81,6 @@ jobs:
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       SERVER_URL: ${{ secrets.SERVER_URL }}
 
-      # (있으면) OAuth/외부 키들 — 필요 없는 항목은 비워둬도 무방
       MAIN_SERVICE_URL: ${{secrets.MAIN_SERVICE_URL}}
       B_SERVER_PORT: ${{secrets.B_SERVER_PORT}}
 
