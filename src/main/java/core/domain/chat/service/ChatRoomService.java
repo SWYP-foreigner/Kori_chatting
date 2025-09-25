@@ -37,8 +37,6 @@ public class ChatRoomService {
     private final ChatMessageService chatMessageService;
     private final ChatRoomRepository chatRoomRepository;
 
-    private record ChatRoomWithTime(ChatRoom room, Instant lastMessageTime) {}
-
     @Transactional(readOnly = true)
     public List<ChatRoomSummaryResponse> getMyAllChatRoomSummaries(Long userId) {
         List<ChatRoom> rooms = chatRoomRepo.findActiveChatRoomsByUserId(userId, ChatParticipantStatus.ACTIVE);
@@ -104,10 +102,7 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public ChatRoomResponse createRoom(Long currentUserId, Long otherUserId) { // ◀ 반환 타입 변경
-        List<Long> userIds = Arrays.asList(currentUserId, otherUserId);
-
-        // 1. 기존 로직으로 ChatRoom 엔티티를 찾거나 생성합니다.
+    public ChatRoomResponse createRoom(Long currentUserId, Long otherUserId) {
         ChatRoom room;
         List<ChatRoom> existingRooms  = chatRoomRepo.findOneToOneRoomByParticipantIds(currentUserId, otherUserId);
         if (existingRooms .size() > 1) {
